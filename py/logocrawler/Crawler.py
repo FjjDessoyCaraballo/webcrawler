@@ -3,20 +3,37 @@ import csv
 from typing import TypedDict
 import aiohttp
 import asyncio
-
-class DomainRecord(TypedDict):
-	"""
-	Class to define what our list of dictionaries will contain. This is mostly for documentation reasons.
-	"""
-	domain: str
-	logo_url: str
-	favicon_url: str
+import sqlite3
 
 class Crawler:
 	def __init__(self):
-		self._Entries: list[DomainRecord] = []
+		self._Entries: list[str] = []
+		self._DbPath = 'logos.db'
+		self._InitDb()
 
-	def EntryPoint(self, Domains, mode):
+	def _InitDb(self):
+		"""
+		Database initialization for storing the `index.html` files from each of the listed domains. Takes no parameters
+		nor returns anything.
+		"""
+		conn = sqlite3.connect(self._DbPath)
+		conn.execute('''
+			CREATE TABLE IF NOT EXISTS domains (
+			   id INTEGER PRIMARY KEY,
+			   domain TEXT UNIQUE,
+			   html_body TEXT,
+			   logo_url TEXT,
+			   favicon_url TEXT,
+			   fetch_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+			   fetch_status INTEGER,
+			   extraction_method TEXT,
+			   confidence_score REAL
+			)
+		''')
+		conn.commit()
+		conn.close()
+
+	def EntryPoint(self, Domains, mode) -> None:
 		"""
 		Entrypoint should be the only public function to avoid confusion. We will work
 		with the bare minimum and work our way to the webscrapping after this.
@@ -27,19 +44,47 @@ class Crawler:
 
 		:Returns: None
 		"""
-		SingleEntry = False
 		if mode == 1:
-			self.CsvEntry(Domains)
-		elif mode == 2:
-			SingleEntry = True
-			self.SingleEntry(Domains)
-		self.MakeRequests()
-
-	async def MakeRequests(self):
+			self._CsvEntry(Domains)
+		elif mode == 2:	
+			self._SingleEntry(Domains)
 		
-		return 
+		asyncio.run(self._StoreRequests())
 
-	def CsvEntry(self, Domains):
+	async def _StoreRequests(self) -> None:
+		"""
+		Fetch the index.html file from all listed domains and insert them into the database.
+		"""
+		conn = sqlite3.connect(self._DbPath)
+
+		async with aiohttp.ClientSession() as session:
+			for domain in self._Entries:
+				try:
+					async with session.get(f'https://{domain}') as response:
+						if session.status == 200:
+							html = await response.text()
+							conn.execute('''
+								INSERT OR REPLACE INTO domains (
+									domain, html_body, fetch_status
+								) VALUE (?, ?, ?)
+							''', (domain, html, response.status))
+						else:
+							conn.execute('''
+								INSERT OR REPLACE INTO domains (
+									domain, fetch_status
+								) VALUE (?, ?)
+							''', (domain, response.status))
+				except Exception as e:
+					exit(print(f'Error fetching {domain}: {e}'))
+					conn.execute('''
+								INSERT OR REPLACE INTO domains (
+				  					domain, fetch_status
+				  				) VALUE (?, ?)
+							''', (domain, 0))
+		conn.commit()
+		conn.close()
+
+	def _CsvEntry(self, Domains) -> None:
 		"""
 		This function is called when mode (1) was chosen. We proceed to parse the csv file.
 		Any user faulty input will make the program exit during parsing time.
@@ -49,13 +94,12 @@ class Crawler:
 		:Returns: None
 		"""
 		try:
-			path = self.FindCsv(Domains)
-			self._Entries = self.OpenCsv(path)
+			path = self._FindCsv(Domains)
+			self._Entries = self._OpenCsv(path)
 		except Exception as e:
 			print(f"Error: {e}")
-		return
 	
-	def OpenCsv(self, CsvPath) -> list[DomainRecord]:
+	def _OpenCsv(self, CsvPath) -> list[str]:
 		"""
 		Function to open and list out the domains, leaving blank spaces for later use when
 		we retrieve the logos and favicons.
@@ -69,15 +113,10 @@ class Crawler:
 			Data = []
 			for rows in Reader:
 				if rows:
-					DomainDictionary = {
-						'domain': rows[0].strip(), 
-						'logo_url': '',
-						'favicon_url': ''
-					}
-					Data.append(DomainDictionary)
+					Data.append(rows[0].strip())
 		return Data
 	
-	def FindCsv(self, CsvFileName) -> str:
+	def _FindCsv(self, CsvFileName) -> str:
 		"""
 		Function dedicated to fetching the file named by user in argv[1].
 
@@ -85,21 +124,15 @@ class Crawler:
 
 		:Returns: `CsvFilePath` a string containing the absolute path to the file.
 		"""
-		path = os.path.dirname(__file__)
-		path = os.path.dirname(path)
-		path = os.path.dirname(path)
-		CsvFileName = os.path.abspath(f'{CsvFileName}')
-		CsvFilePath = os.path.join(path, f'{CsvFileName}')
-		if CsvFilePath is None:
-			exit(print(f'{CsvFileName} does not exist in the repository.'))
+		try:
+			path = os.path.dirname(__file__)
+			path = os.path.dirname(path)
+			path = os.path.dirname(path)
+			CsvFileName = os.path.abspath(f'{CsvFileName}')
+			CsvFilePath = os.path.join(path, f'{CsvFileName}')
+		except Exception as e:
+			exit(print(f'{CsvFileName}: {e}'))
 		return CsvFilePath
 	
-	def SingleEntry(self, Domain) -> None:
-		Data = []
-		SingleEntry = {
-			'domain': Domain,
-			'logo_url': '',
-			'favicon_url': ''
-		}
-		Data.append(SingleEntry)
-		self._Entries = Data
+	def _SingleEntry(self, Domain) -> None:
+		self._Entries = [Domain]
