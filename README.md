@@ -30,10 +30,10 @@ After that, inside the `py` directory you will find find another directory calle
 If you want to run a csv with a list of domains for the crawler to fetch, run the following line:
 
 ```bash
-$ python3 Entry.py your_file.csv
+$ ./run.sh
 ```
 
-Or just run the `Entry.py` file without arguments
+Or go into `py/logocrawler` and run the `Entry.py` file without arguments
 
 ```bash
 $ python Entry.py
