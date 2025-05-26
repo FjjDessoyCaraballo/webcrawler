@@ -1,9 +1,8 @@
 import os
 import csv
-from typing import TypedDict
+import sqlite3
 import aiohttp
 import asyncio
-import sqlite3
 
 class Crawler:
 	def __init__(self):
@@ -21,6 +20,7 @@ class Crawler:
 			CREATE TABLE IF NOT EXISTS domains (
 			   id INTEGER PRIMARY KEY,
 			   domain TEXT UNIQUE,
+			   robots_txt INTEGER CHECK (robots_txt IN (0, 1)),
 			   html_body TEXT,
 			   logo_url TEXT,
 			   favicon_url TEXT,
@@ -48,41 +48,111 @@ class Crawler:
 			self._CsvEntry(Domains)
 		elif mode == 2:	
 			self._SingleEntry(Domains)
-		
 		asyncio.run(self._StoreRequests())
+
+	async def _CheckRobotsTxt(self, session: aiohttp.ClientSession, domain: str) -> bool:
+		"""
+		Check if crawling is allowed according to robots.txt
+		
+		:Parameter: session - aiohttp session to use for the request
+		:Parameter: domain - domain to check robots.txt for
+		:Returns: True if crawling is allowed, False otherwise
+		"""
+		try:
+			async with session.get(f'https://{domain}/robots.txt') as response:
+				if response.status == 200:
+					content = await response.text()
+					return 'Disallow: /' not in content
+		except:
+			# If robots.txt is inaccessible, assume crawling is allowed
+			pass
+		return True
+
 
 	async def _StoreRequests(self) -> None:
 		"""
 		Fetch the index.html file from all listed domains and insert them into the database.
 		"""
+		# Counters for visualization
+		SuccessCounter: int = 0
+		FailedCounter: int = 0
+		OtherErrorCounter: int = 0
+
 		conn = sqlite3.connect(self._DbPath)
 
-		async with aiohttp.ClientSession() as session:
+		connector = aiohttp.TCPConnector(
+			limit=100,
+			limit_per_host=1,
+			ttl_dns_cache=300
+		)
+		
+		timeout = aiohttp.ClientTimeout(total=15)
+		
+		async with aiohttp.ClientSession(
+			connector=connector,
+			timeout=timeout,
+			headers={'User-Agent': 'Mozilla/5.0 (compatible; LogoCrawler/1.0)'},
+			# Got some help from AI here to define limits in the response
+			read_bufsize=65536,  # 64KB read buffer
+			max_line_size=16384,  # 16KB max line size
+			max_field_size=16384  # 16KB max header field size
+		) as session:
 			for domain in self._Entries:
+				RobotsNotAllowed = await self._CheckRobotsTxt(session, domain)
+
 				try:
 					async with session.get(f'https://{domain}') as response:
-						if session.status == 200:
+						if response.status == 200:
 							html = await response.text()
-							conn.execute('''
-								INSERT OR REPLACE INTO domains (
-									domain, html_body, fetch_status
-								) VALUE (?, ?, ?)
-							''', (domain, html, response.status))
+							if RobotsNotAllowed is True:
+								conn.execute('''
+									INSERT OR REPLACE INTO domains (
+										domain, html_body, robots_txt, fetch_status
+					 				) VALUES (?, ?, ?, ?)
+								''', (domain, html, 0, response.status))
+								SuccessCounter += 1
+								print(f"☑️ {domain}: Success, but robots.txt was present in domain")
+							else:
+								conn.execute('''
+									INSERT OR REPLACE INTO domains (
+										domain, html_body, robots_txt, fetch_status
+									) VALUES (?, ?, ?, ?)
+								''', (domain, html, 1, response.status))
+								SuccessCounter += 1
+								print(f"✅ {domain}: Success")
 						else:
 							conn.execute('''
 								INSERT OR REPLACE INTO domains (
 									domain, fetch_status
-								) VALUE (?, ?)
+								) VALUES (?, ?)
 							''', (domain, response.status))
-				except Exception as e:
-					exit(print(f'Error fetching {domain}: {e}'))
+							FailedCounter += 1
+							print(f"⚠️  {domain}: HTTP {response.status}")
+							
+				except aiohttp.ClientResponseError as e:
 					conn.execute('''
-								INSERT OR REPLACE INTO domains (
-				  					domain, fetch_status
-				  				) VALUE (?, ?)
-							''', (domain, 0))
+						INSERT OR REPLACE INTO domains (
+							domain, fetch_status
+						) VALUES (?, ?)
+					''', (domain, e.status if hasattr(e, 'status') else 0))
+					OtherErrorCounter += 1
+					print(f"❌ {domain}: HTTP Error {e.status}")
+					
+				except Exception as e:
+					conn.execute('''
+						INSERT OR REPLACE INTO domains (
+							domain, fetch_status
+						) VALUES (?, ?)
+					''', (domain, 0))
+					OtherErrorCounter += 1
+					print(f"❌ {domain}: {type(e).__name__}: {e}")
+		
 		conn.commit()
 		conn.close()
+		print(f"\nCompleted fetching {len(self._Entries)} domains")
+		print(f"\n✅Successfully fetched: {SuccessCounter}")
+		print(f"\n⚠️Failed to fetch: {FailedCounter}")
+		print(f"\n❌ Other errors: {OtherErrorCounter}")
 
 	def _CsvEntry(self, Domains) -> None:
 		"""
