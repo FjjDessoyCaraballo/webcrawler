@@ -2,7 +2,9 @@ import os
 import csv
 import sqlite3
 import aiohttp
+import ssl
 import asyncio
+# import random ## FOR TESTING PURPOSES
 
 class Crawler:
 	def __init__(self):
@@ -22,10 +24,12 @@ class Crawler:
 			   domain TEXT UNIQUE,
 			   robots_txt INTEGER CHECK (robots_txt IN (0, 1)),
 			   html_body TEXT,
+			   final_url TEXT,
 			   logo_url TEXT,
 			   favicon_url TEXT,
 			   fetch_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
 			   fetch_status INTEGER,
+			   error_type TEXT,
 			   extraction_method TEXT,
 			   confidence_score REAL
 			)
@@ -55,7 +59,9 @@ class Crawler:
 		Check if crawling is allowed according to robots.txt
 		
 		:Parameter: session - aiohttp session to use for the request
+
 		:Parameter: domain - domain to check robots.txt for
+
 		:Returns: True if crawling is allowed, False otherwise
 		"""
 		try:
@@ -76,83 +82,118 @@ class Crawler:
 		# Counters for visualization
 		SuccessCounter: int = 0
 		FailedCounter: int = 0
-		OtherErrorCounter: int = 0
+
+		# self._Entries = random.sample(self._Entries, 10) ## FOR TESTING PURPOSES
 
 		conn = sqlite3.connect(self._DbPath)
+
+		ssl_context = ssl.create_default_context()
+		ssl_context.check_hostname = False
+		ssl_context.verify_mode = ssl.CERT_NONE
 
 		connector = aiohttp.TCPConnector(
 			limit=100,
 			limit_per_host=1,
-			ttl_dns_cache=300
+			ttl_dns_cache=300,
+			ssl_context=ssl_context
 		)
 		
-		timeout = aiohttp.ClientTimeout(total=15)
+		timeout = aiohttp.ClientTimeout(total=15, connect=10)
 		
+		headers = {
+			'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+			'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+			'Accept-Language': 'en-US,en;q=0.5',
+			'Accept-Encoding': 'gzip, deflate',
+			'Connection': 'keep-alive',
+			'Upgrade-Insecure-Requests': '1',
+    }
+
 		async with aiohttp.ClientSession(
 			connector=connector,
 			timeout=timeout,
-			headers={'User-Agent': 'Mozilla/5.0 (compatible; LogoCrawler/1.0)'},
-			# Got some help from AI here to define limits in the response
-			read_bufsize=65536,  # 64KB read buffer
-			max_line_size=16384,  # 16KB max line size
-			max_field_size=16384  # 16KB max header field size
+			headers=headers,
+			read_bufsize=65536,
+			max_line_size=16384,
+			max_field_size=16384
 		) as session:
 			for domain in self._Entries:
-				RobotsNotAllowed = await self._CheckRobotsTxt(session, domain)
 
-				try:
-					async with session.get(f'https://{domain}') as response:
-						if response.status == 200:
-							html = await response.text()
-							if RobotsNotAllowed is True:
-								conn.execute('''
-									INSERT OR REPLACE INTO domains (
-										domain, html_body, robots_txt, fetch_status
-					 				) VALUES (?, ?, ?, ?)
-								''', (domain, html, 0, response.status))
-								SuccessCounter += 1
-								print(f"☑️ {domain}: Success, but robots.txt was present in domain")
-							else:
-								conn.execute('''
-									INSERT OR REPLACE INTO domains (
-										domain, html_body, robots_txt, fetch_status
-									) VALUES (?, ?, ?, ?)
-								''', (domain, html, 1, response.status))
-								SuccessCounter += 1
-								print(f"✅ {domain}: Success")
-						else:
-							conn.execute('''
-								INSERT OR REPLACE INTO domains (
-									domain, fetch_status
-								) VALUES (?, ?)
-							''', (domain, response.status))
-							FailedCounter += 1
-							print(f"⚠️  {domain}: HTTP {response.status}")
-							
-				except aiohttp.ClientResponseError as e:
+				# Check if robots.txt exists first
+				RobotsAllowed = await self._CheckRobotsTxt(session, domain)
+
+				# Fallback method to differentiate between http and https
+				SuccessUrl, StatusCode, HtmlContent = await self._FetchWithFallback(session, domain)
+
+				if SuccessUrl and HtmlContent:
 					conn.execute('''
-						INSERT OR REPLACE INTO domains (
-							domain, fetch_status
-						) VALUES (?, ?)
-					''', (domain, e.status if hasattr(e, 'status') else 0))
-					OtherErrorCounter += 1
-					print(f"❌ {domain}: HTTP Error {e.status}")
-					
-				except Exception as e:
+					INSERT OR REPLACE INTO domains (
+						domain, html_body, robots_txt, fetch_status, final_url
+					) VALUES (?, ?, ?, ?, ?)
+				''', (domain, HtmlContent, 1 if RobotsAllowed else 0, StatusCode, SuccessUrl))
+					SuccessCounter += 1
+					RobotsStatus = "✅" if RobotsAllowed else "☑️"
+					print(f"{RobotsStatus} {domain} -> {SuccessUrl}: Success")
+				elif StatusCode == -1:
 					conn.execute('''
-						INSERT OR REPLACE INTO domains (
-							domain, fetch_status
-						) VALUES (?, ?)
-					''', (domain, 0))
-					OtherErrorCounter += 1
-					print(f"❌ {domain}: {type(e).__name__}: {e}")
+					INSERT OR REPLACE INTO domains (
+						domain, fetch_status, error_type
+					) VALUES (?, ?, ?)
+				''', (domain, StatusCode, "DNS_RESOLUTION_FAILED"))
+					FailedCounter += 1
+					print(f"💀 {domain} does not exist")
+				else:
+					conn.execute('''
+				  	INSERT OR REPLACE INTO domains (
+				  		domain, fetch_status
+				  ) VALUES (?, ?)
+				''', (domain, StatusCode or 0))
+					FailedCounter += 1
+					print(f"❌ {domain}: Failed (Status : {StatusCode or 'Network Error'})")
+
+				# If we sleep for 100ms we may avoid rate limiting. It adds up in the collection, but pays off in the long-term.
+				# instead of fixed number (100ms) I could probably check the robots.txt for `Crawl-delay`. 
+				await asyncio.sleep(0.1)
 		
 		conn.commit()
 		conn.close()
 		print(f"\nCompleted fetching {len(self._Entries)} domains")
-		print(f"\n✅Successfully fetched: {SuccessCounter}")
-		print(f"\n⚠️Failed to fetch: {FailedCounter}")
-		print(f"\n❌ Other errors: {OtherErrorCounter}")
+		print(f"\n✅ Successfully fetched: {SuccessCounter}")
+		print(f"\n❌ Failed to fetch: {FailedCounter}")
+
+	async def _FetchWithFallback(self, session: aiohttp.ClientSession, domain: str):
+		"""
+		Try multiple URL variants for a domain.
+
+		:Parameters: session information about contained session with given domain
+
+		:Parameters: domain basic URL of the informed domain
+
+		:Returns: Multiple first return value is the final url, second is the HTML status code, and the last is the index.html
+		"""
+		urls_to_try = [
+			f'https://{domain}',
+			f'http://{domain}',
+			f'https://www.{domain}',
+			f'http://www.{domain}'
+		]
+		
+		for url in urls_to_try:
+			try:
+				async with session.get(url, allow_redirects=True) as response:
+					if response.status == 200:
+						html = await response.text()
+						return url, response.status, html
+			except aiohttp.ClientConnectorError as e:
+				if "No address associated with hostname" in str(e):
+					return None, -1, None
+				continue
+			except (aiohttp.ClientError, asyncio.TimeoutError, UnicodeDecodeError):
+				continue # trying to minimize the output, therefore no printing here
+			except Exception as e:
+				continue # trying to minimize the output, therefore no printing here
+		
+		return None, 0, None	
 
 	def _CsvEntry(self, Domains) -> None:
 		"""
@@ -206,3 +247,53 @@ class Crawler:
 	
 	def _SingleEntry(self, Domain) -> None:
 		self._Entries = [Domain]
+
+
+## OLD STUFF
+
+				# try:
+				# 	async with session.get(f'https://{domain}') as response:
+				# 		if response.status == 200:
+				# 			html = await response.text()
+				# 			if RobotsNotAllowed is True:
+				# 				conn.execute('''
+				# 					INSERT OR REPLACE INTO domains (
+				# 						domain, html_body, robots_txt, fetch_status
+				# 	 				) VALUES (?, ?, ?, ?)
+				# 				''', (domain, html, 0, response.status))
+				# 				SuccessCounter += 1
+				# 				print(f"☑️ {domain}: Success, but robots.txt was present in domain")
+				# 			else:
+				# 				conn.execute('''
+				# 					INSERT OR REPLACE INTO domains (
+				# 						domain, html_body, robots_txt, fetch_status
+				# 					) VALUES (?, ?, ?, ?)
+				# 				''', (domain, html, 1, response.status))
+				# 				SuccessCounter += 1
+				# 				print(f"✅ {domain}: Success")
+				# 		else:
+				# 			conn.execute('''
+				# 				INSERT OR REPLACE INTO domains (
+				# 					domain, fetch_status
+				# 				) VALUES (?, ?)
+				# 			''', (domain, response.status))
+				# 			FailedCounter += 1
+				# 			print(f"⚠️  {domain}: HTTP {response.status}")
+							
+				# except aiohttp.ClientResponseError as e:
+				# 	conn.execute('''
+				# 		INSERT OR REPLACE INTO domains (
+				# 			domain, fetch_status
+				# 		) VALUES (?, ?)
+				# 	''', (domain, e.status if hasattr(e, 'status') else 0))
+				# 	OtherErrorCounter += 1
+				# 	print(f"❌ {domain}: HTTP Error {e.status}")
+					
+				# except Exception as e:
+				# 	conn.execute('''
+				# 		INSERT OR REPLACE INTO domains (
+				# 			domain, fetch_status
+				# 		) VALUES (?, ?)
+				# 	''', (domain, 0))
+				# 	OtherErrorCounter += 1
+				# 	print(f"❌ {domain}: {type(e).__name__}: {e}")
