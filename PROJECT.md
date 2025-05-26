@@ -18,7 +18,8 @@
 4. Since I have the HTML bodies, I can investigate possible tags with links to the logo;
 5. For those that do not contain anything in logo yet, I will be left out with a group that I can investigate further why my original methodology did not work;
 6. Add different methodologies to reach at least 51% extraction;
-7. Check `robot.txt` for permissions.
+7. Check `robot.txt` for permissions;
+8. Use two classes (Crawler and Fetcher) for the whole process, ensuring modularity and later use;
 
 ## External libraries
 
@@ -28,6 +29,60 @@ So far, the only external libraries that have shown to be absolutely necessary a
 
 - About web crawling in general: [1](https://www.cloudflare.com/learning/bots/what-is-a-web-crawler/)
 - About robot.txt: [1](https://developers.google.com/search/docs/crawling-indexing/robots/intro) [2](https://moz.com/learn/seo/robotstxt)
+
+## Current schema of the database
+
+**Table**: `domains`
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | INTEGER | PRIMARY KEY | Unique identifier for each domain record |
+| `domain` | TEXT | UNIQUE | The base domain name (e.g., "facebook.com") |
+| `robots_txt` | INTEGER | CHECK (0,1) | Whether robots.txt allows crawling: `0` = disallowed, `1` = allowed |
+| `html_body` | TEXT | | The complete HTML content of the website's index page |
+| `final_url` | TEXT | | The final URL after following redirects (e.g., "https://www.facebook.com") |
+| `logo_url` | TEXT | | The extracted logo image URL (if found) |
+| `favicon_url` | TEXT | | The extracted favicon URL (if found) |
+| `fetch_timestamp` | DATETIME | DEFAULT CURRENT_TIMESTAMP | When the domain was last crawled |
+| `fetch_status` | INTEGER | | HTTP status code received (200, 403, 404, etc.) or custom error codes |
+| `error_type` | TEXT | | Type of error encountered during crawling |
+| `extraction_method` | TEXT | | The method used to extract the logo (for debugging/optimization) |
+| `confidence_score` | REAL | | Confidence level (0.0-1.0) in the extracted logo accuracy |
+
+### Fetch Status Codes
+
+*200*: Successful fetch
+*403*: Access forbidden (bot blocking)
+*404*: Page not found
+*-1*: DNS resolution failed (domain doesn't exist)
+*0*: Network error or timeout
+
+### Error Types
+
+*DNS_RESOLUTION_FAILED*: Domain name could not be resolved
+*BOT_BLOCKED*: Server detected and blocked the crawler (403)
+*HTTP_ERROR*: Generic HTTP error
+*NETWORK_ERROR*: Connection timeout or network issue
+*SSL_ERROR*: SSL/TLS certificate problems
+
+### Extraction Methods
+
+*IMG_TAG_ALT*: Found logo via `<img>` tag with "logo" in alt text
+*IMG_TAG_CLASS*: Found logo via `<img>` tag with "logo" in class name
+*SVG_TAG*: Found logo via `<SVG>` tag with "logo"
+*CUSTOM_TAG*: Found logo via, for example, `<a>` tag with "logo"
+*CSS_BACKGROUND*: Found logo as CSS background image
+*SVG_ELEMENT*: Found logo as inline SVG element
+*FAVICON_LINK*: Used favicon as fallback logo
+*MANUAL_HEURISTIC*: Custom logic-based extraction
+
+### Confidence Scores
+
+*1.0*: High confidence (clear logo indicators)
+*0.7-0.9*: Medium confidence (probable logo)
+*0.5-0.6*: Low confidence (uncertain match)
+*0.0-0.4*: Very low confidence (likely false positive)
+*NULL*: No extraction attempted or failed
 
 ## Notes
 
@@ -73,3 +128,19 @@ Completed fetching 10 domains
 ```
 
 Some of the prints may not get through to the final version. The `epaperflip` domain is an example of outdated domains that just don't exist anymore. Additionally, the `yahoo.co.jp` is another good example of an outdated domain, but this one "exists". The problem here is that there is probably a regional ban. I am not taking care of this edge case.
+
+Even though I tried to be careful with the time span of my tries, I think I might have gotten my IP banned from `facebook.com`. The only possible immediate solution for this would be to use official APIs, but this approach definitely won't work for us either because i) it is not escalable; ii) companies don't offer APIs for logos as much as I know.
+
+### May 27th
+
+Made a full run of Crawler and this was the result:
+
+```bash
+Completed fetching 1000 domains
+
+✅ Successfully fetched: 704
+
+❌ Failed to fetch: 296
+```
+
+At this point, it is safe to assume that some of those domains that failed were either overly protective or just plainly don't exist anymore. At least the number of remaining domains does not trigger me to enhance the crawler requests.

@@ -9,6 +9,8 @@ import asyncio
 class Crawler:
 	def __init__(self):
 		self._Entries: list[str] = []
+		# database should be around 200mb, so it does not fit into a git repo
+		# leave the database somewhere else for easier access
 		self._DbPath = 'logos.db'
 		self._InitDb()
 
@@ -52,7 +54,8 @@ class Crawler:
 			self._CsvEntry(Domains)
 		elif mode == 2:	
 			self._SingleEntry(Domains)
-		asyncio.run(self._StoreRequests())
+		done = asyncio.run(self._StoreRequests())
+		return done
 
 	async def _CheckRobotsTxt(self, session: aiohttp.ClientSession, domain: str) -> bool:
 		"""
@@ -75,7 +78,7 @@ class Crawler:
 		return True
 
 
-	async def _StoreRequests(self) -> None:
+	async def _StoreRequests(self) -> bool:
 		"""
 		Fetch the index.html file from all listed domains and insert them into the database.
 		"""
@@ -100,6 +103,7 @@ class Crawler:
 		
 		timeout = aiohttp.ClientTimeout(total=15, connect=10)
 		
+		# AI helped me here to get a more 'human-like' header
 		headers = {
 			'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
 			'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -107,7 +111,7 @@ class Crawler:
 			'Accept-Encoding': 'gzip, deflate',
 			'Connection': 'keep-alive',
 			'Upgrade-Insecure-Requests': '1',
-    }
+		}
 
 		async with aiohttp.ClientSession(
 			connector=connector,
@@ -160,6 +164,7 @@ class Crawler:
 		print(f"\nCompleted fetching {len(self._Entries)} domains")
 		print(f"\n✅ Successfully fetched: {SuccessCounter}")
 		print(f"\n❌ Failed to fetch: {FailedCounter}")
+		return True
 
 	async def _FetchWithFallback(self, session: aiohttp.ClientSession, domain: str):
 		"""
