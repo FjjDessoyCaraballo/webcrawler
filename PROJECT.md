@@ -21,9 +21,13 @@
 7. Check `robot.txt` for permissions;
 8. Use two classes (Crawler and Fetcher) for the whole process, ensuring modularity and later use;
 
+## Why two classes for one task?
+
+To make the code clearer and separate tasks more accordingly, I believe it was a better practice to separate one task into two. The `Crawler` bot can be responsible for checking updates, and if there is no update, there shouldn't be any extraction of the logo. This approach assures us that we are only going to make requests that are neccessary.
+
 ## External libraries
 
-So far, the only external libraries that have shown to be absolutely necessary are `sqlite3` and `aiohttp`
+I am trying to work with built-in libraries as much as possible. So far, the only external libraries that have shown to be absolutely necessary are `sqlite3` and `aiohttp`.
 
 ## Sources
 
@@ -57,15 +61,7 @@ So far, the only external libraries that have shown to be absolutely necessary a
 *-1*: DNS resolution failed (domain doesn't exist)
 *0*: Network error or timeout
 
-### Error Types
-
-*DNS_RESOLUTION_FAILED*: Domain name could not be resolved
-*BOT_BLOCKED*: Server detected and blocked the crawler (403)
-*HTTP_ERROR*: Generic HTTP error
-*NETWORK_ERROR*: Connection timeout or network issue
-*SSL_ERROR*: SSL/TLS certificate problems
-
-### Extraction Methods
+### Extraction Methods (will definitely change with time)
 
 *IMG_TAG_ALT*: Found logo via `<img>` tag with "logo" in alt text
 *IMG_TAG_CLASS*: Found logo via `<img>` tag with "logo" in class name
@@ -84,7 +80,7 @@ So far, the only external libraries that have shown to be absolutely necessary a
 *0.0-0.4*: Very low confidence (likely false positive)
 *NULL*: No extraction attempted or failed
 
-## Notes
+## Log
 
 ### May 22nd to 26th
 

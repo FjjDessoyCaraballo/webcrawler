@@ -11,7 +11,7 @@ class Crawler:
 		self._Entries: list[str] = []
 		# database should be around 200mb, so it does not fit into a git repo
 		# leave the database somewhere else for easier access
-		self._DbPath = 'logos.db'
+		self._DbPath: str = 'logos.db'
 		self._InitDb()
 
 	def _InitDb(self):
@@ -19,7 +19,7 @@ class Crawler:
 		Database initialization for storing the `index.html` files from each of the listed domains. Takes no parameters
 		nor returns anything.
 		"""
-		conn = sqlite3.connect(self._DbPath)
+		conn: sqlite3.Connection = sqlite3.connect(self._DbPath)
 		conn.execute('''
 			CREATE TABLE IF NOT EXISTS domains (
 			   id INTEGER PRIMARY KEY,
@@ -39,7 +39,7 @@ class Crawler:
 		conn.commit()
 		conn.close()
 
-	def EntryPoint(self, Domains, mode) -> None:
+	def EntryPoint(self, Domains, mode) -> bool:
 		"""
 		Entrypoint should be the only public function to avoid confusion. We will work
 		with the bare minimum and work our way to the webscrapping after this.
@@ -54,7 +54,7 @@ class Crawler:
 			self._CsvEntry(Domains)
 		elif mode == 2:	
 			self._SingleEntry(Domains)
-		done = asyncio.run(self._StoreRequests())
+		done: bool = asyncio.run(self._StoreRequests())
 		return done
 
 	async def _CheckRobotsTxt(self, session: aiohttp.ClientSession, domain: str) -> bool:
@@ -88,7 +88,7 @@ class Crawler:
 
 		# self._Entries = random.sample(self._Entries, 10) ## FOR TESTING PURPOSES
 
-		conn = sqlite3.connect(self._DbPath)
+		conn: sqlite3.Connection = sqlite3.connect(self._DbPath)
 
 		ssl_context = ssl.create_default_context()
 		ssl_context.check_hostname = False
