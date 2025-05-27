@@ -80,7 +80,7 @@ class Crawler:
 
 	async def _StoreRequests(self) -> bool:
 		"""
-		Fetch the index.html file from all listed domains and insert them into the database.
+		Fetch the index.htm file from all listed domains and insert them into the database. Takes no arguments.
 		"""
 		# Counters for visualization
 		SuccessCounter: int = 0

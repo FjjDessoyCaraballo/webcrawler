@@ -19,10 +19,10 @@ class Fetcher:
 			asyncio(self._ProcessRows(Cursor))
 			print('Executed to the end')
 			self._conn.close()
+			return True
 		except Exception as e:
 			print(f'Error: {e}')
 			return False
-		return True
 	
 	def _FetchRows(self) -> sqlite3.Cursor:
 		"""
@@ -40,49 +40,127 @@ class Fetcher:
 		row: Tuple[int, str, str, str]
 		for row in Cursor:
 			RowId, Domain, HtmlBody, FinalUrl = row
-			print(f'[{RowId}] 🔵 Attemping to extract logo for {Domain}')
-			self._ScanHtml(HtmlBody)
+			print(f'[{RowId}] Attemping to extract logo for {Domain}')
+			if self._ScanHtml(RowId, HtmlBody, FinalUrl) == False:
+				print(f'[{RowId}] 🔴 Failed to extract logo for {Domain}')
+			print(f'[{RowId}] 🟢 extracted logo of {Domain}')
 
-	async def _ScanHtml(self, RowId: int, HtmlBody: str) -> str:
+	async def _ScanHtml(self, RowId: int, HtmlBody: str, Domain: str) -> bool:
 		"""
 		Method to scan the HTML and find which method we are using to extract the logo.
+		
+		:Parameter: RowId integer representing which row of the database the HTML body is from.
+
+		:Parameter: HtmlBody the index.html of given domain from the database.
+
+		:Returns: None if no method was applicable, we return None
 		"""
 		LogoUrl: str
+		Favicon: str
+
+		# Find favicon as a temporary fallback alternative
+		Favicon = self._FaviconExtraction(HtmlBody, Domain)
+		if Favicon is not None:
+			self._InsertFavicon(RowId, Favicon, 'FAVICON_LINK')
 
 		# Method 1: SVG tags
-		LogoUrl = self._SVGMethod()
+		LogoUrl = self._SVGMethod(HtmlBody, Domain)
 		if LogoUrl is not None:
 			self._InsertLogoIntoDb(RowId, LogoUrl, 'SVG_TAG')
-			return
+			return True
 
 		# Method 2: img tags
-		LogoUrl = self._IMGMethod()
+		LogoUrl = self._IMGMethod(HtmlBody, Domain)
 		if LogoUrl is not None:
 			self._InsertLogoIntoDb(RowId, LogoUrl, 'IMG_TAG')
-			return
+			return True
 		
 		# Method 3: custom tags
-		LogoUrl = self._CustomTagMethod()
+		LogoUrl = self._CustomTagMethod(HtmlBody, Domain)
 		if LogoUrl is not None:
 			self._InsertLogoIntoDb(RowId, LogoUrl, 'CUSTOM_TAG')
-			return
-		
-		# favicon?
+			return True
 
+		return False
+
+	async def _SVGMethod(self, HtmlBody: str, Domain: str):
+		"""
+		Method X for logo extraction using XXX methodology that does Y.
+
+		:Parameter: HtmlBody string of the index.html of given domain in database.
+		
+		:Parameter: Domain string containing the landing page/homepage of given domain.
+
+		:Returns: LogoUrl string containing URL of logo image. Returns None if method fails to find logo.
+		"""
+		LogoUrl: str = ''
 		return None
 
-	async def _SVGMethod(self):
-		return
+	async def _IMGMethod(self, HtmlBody: str, Domain: str):
+		"""
+		Method X for logo extraction using XXX methodology that does Y.
 
-	async def _IMGMethod(self):
-		return
+		:Parameter: HtmlBody string of the index.html of given domain in database.
+		
+		:Parameter: Domain string containing the landing page/homepage of given domain.
 
-	async def _CustomTagMethod(self):
-		return
+		:Returns: LogoUrl string containing URL of logo image. Returns None if method fails to find logo.
+		"""
+		LogoUrl: str = ''
+		return None
+
+	async def _CustomTagMethod(self, HtmlBody: str, Domain: str):
+		"""
+		Method X for logo extraction using XXX methodology that does Y.
+
+		:Parameter: HtmlBody string of the index.html of given domain in database.
+		
+		:Parameter: Domain string containing the landing page/homepage of given domain.
+
+		:Returns: LogoUrl string containing URL of logo image. Returns None if method fails to find logo.
+		"""
+		LogoUrl: str = ''
+		return None
 
 	async def _InsertLogoIntoDb(self, RowId: int, LogoUrl: str, Method: str) -> None:
-		return
+		"""
+		Method that exclusively deals with inserting logos into the database.
 
-	# fetch a row from a domain that returned status code 200
-	# make a function to go through the html file
-	# find references to "logo"
+		:Parameter: RowId integer representing which row of the database the HTML body is from.
+		
+		:Parameter: LogoUrl URL that contains logo image.
+		
+		:Parameter: Method methodology used to obtain logo.
+		
+		:Returns: None
+		"""
+		self._conn.execute(''''
+					UPDATE domains
+					SET logo_url = ?, extraction_method = ?
+					WHERE id = ?
+					''', (LogoUrl, Method, RowId))
+
+	async def _FaviconExtraction(self, HtmlBody: str, Domain: str) -> Optional[str]:
+		"""
+		Method to find and extract URL of favicon
+
+		:Parameter: HtmlBody string of the index.html of given domain in database.
+		
+		:Parameter: Domain string containing the landing page/homepage of given domain.
+		
+		:Returns: Favicon URL in string if successful. None is returned in case of failure.
+		"""
+		Favicon: str = ''
+		return Favicon
+	
+	async def _InsertFavicon(self, RowId: int, Favicon: str, Method: str) -> None:
+		"""
+		Method for insertion of favicon URL into database column favicon_url.
+
+		:Parameter: RowId integer representing which row of the database the HTML body is from.
+
+		:Parameter: Favicon URL in string format containing the address to the favicon.
+
+		:Parameter: Method methodology used to obtain logo.
+		"""
+		return
