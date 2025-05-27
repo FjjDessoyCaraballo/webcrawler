@@ -65,26 +65,26 @@ class Fetcher:
 			self._InsertFavicon(RowId, Favicon, 'FAVICON_LINK')
 
 		# Method 1: SVG tags
-		LogoUrl = self._SVGMethod(HtmlBody, Domain)
+		LogoUrl = self._SvgMethod(HtmlBody, Domain)
 		if LogoUrl is not None:
-			self._InsertLogoIntoDb(RowId, LogoUrl, 'SVG_TAG')
+			self._InsertLogoIntoDb(RowId, LogoUrl, 'SVG_TAG', 0.8)
 			return True
 
 		# Method 2: img tags
-		LogoUrl = self._IMGMethod(HtmlBody, Domain)
+		LogoUrl = self._ImgMethod(HtmlBody, Domain)
 		if LogoUrl is not None:
-			self._InsertLogoIntoDb(RowId, LogoUrl, 'IMG_TAG')
+			self._InsertLogoIntoDb(RowId, LogoUrl, 'IMG_TAG', 0.6)
 			return True
 		
 		# Method 3: custom tags
 		LogoUrl = self._CustomTagMethod(HtmlBody, Domain)
 		if LogoUrl is not None:
-			self._InsertLogoIntoDb(RowId, LogoUrl, 'CUSTOM_TAG')
+			self._InsertLogoIntoDb(RowId, LogoUrl, 'CUSTOM_TAG', 0.3)
 			return True
 
 		return False
 
-	async def _SVGMethod(self, HtmlBody: str, Domain: str):
+	async def _SvgMethod(self, HtmlBody: str, Domain: str):
 		"""
 		Method #1 for logo extraction by converting SVG into URL data methodology using base64.
 
@@ -107,15 +107,33 @@ class Fetcher:
 
 		for SvgContent, Context in AllSvgs:
 			Score = self._CalculateProbabilityScore(SvgContent, Context)
+			if Score > 0:
+				ScoredSvgs.append(SvgContent, Score)
+		
+		# AI used here: helped with the lambda syntax in max
+		WinnerSvg = max(ScoredSvgs, key=lambda x: x[1])[0]
+		LogoUrl = self._SvgToDataUrl(WinnerSvg)
+		return LogoUrl
 
-		return None
-
-	async def _CalculateProbabilityScore(self, SvgContent: str, Context: str) -> float:
+	def _SvgToDataUrl(self, SvgContent: str) -> str:
 		"""
-		Method to calculate the likelihood that the SVG tag we got contains a logo. The scale
+		Convert SVG to browser-accessible data URL
+
+		:Parameter: SvgContent a string of the HTML SVG tag containing the logo
+
+		:Returns: base64 logo URL
+		"""
+		SvgClean = SvgContent.strip()
+		SvgBytes = SvgClean.encode('utf-8')
+		SvgBase64 = base64.b64encode(SvgBytes).decode('utf-8')
+		return f'data:image/svg+xml;base64,{SvgBase64}'
+
+	async def _CalculateProbabilityScore(self, Content: str, Context: str) -> float:
+		"""
+		Method to calculate the likelihood that the tag we got contains a logo. The scale
 		goes form zero (0) to one (1).
 
-		:Parameter: SvgContent is a string that contains the content inside the SVG tag.
+		:Parameter: Content is a string that contains the content inside the tag.
 		
 		:Parameter: Context is a string that contains everything between opening and closing svg tag.
 
@@ -124,7 +142,7 @@ class Fetcher:
 		Score: float = 0.0
 		
 		# Make everything lower case to have a standard baseline
-		SvgContentLowerCase = SvgContent.lower()
+		ContentLowerCase = Content.lower()
 		ContextLowerCase = Context.lower()
 
 		# AI used: I used AI to find a way to structure a scoring point system for the SVGs
@@ -152,10 +170,16 @@ class Fetcher:
 			'id="logo': 0.4,
 			'class="brand': 0.3,
 			'class="header': 0.2,
+
+			# Source patterns
+    		'src="logo': 0.3,
+        	'src="brand': 0.3,
+        	'href="logo': 0.2,
+        	'href="#logo': 0.3,
 		}
 
 		for indicator, weight in PositiveIndicators.items():
-			if indicator in SvgContentLowerCase or indicator in ContextLowerCase:
+			if indicator in ContentLowerCase or indicator in ContextLowerCase:
 				# If we find a string in the tag that says "logo", the indicator
 				# will be a string called logo and the indicator will be the corresponding
 				# score of "logo", which is 0.4 in our dictionary.
@@ -174,7 +198,7 @@ class Fetcher:
 		}
 
 		for indicator, penalty in NegativeIndicators.items():
-			if indicator in SvgContentLowerCase or indicator in ContextLowerCase:
+			if indicator in ContentLowerCase or indicator in ContextLowerCase:
 				# In the same way as we compiled the score with positive indicators, the
 				# negative indicators are meant to keep us clear from false-positives.
 				score -= penalty
@@ -186,6 +210,9 @@ class Fetcher:
 
 		# regex pattern for SVG tags
 		pattern = r'<svg[^>]*>.*?</svg>'
+
+		# IGNORECASE - case insensitive
+		# DOTALL - make dot match newlines too
 		matches = re.finditer(pattern, HtmlBody, re.DOTALL | re.IGNORECASE)
 
 		for match in matches:
@@ -198,7 +225,7 @@ class Fetcher:
 
 		return svgs
 
-	async def _IMGMethod(self, HtmlBody: str, Domain: str):
+	async def _ImgMethod(self, HtmlBody: str, Domain: str):
 		"""
 		Method #2 for logo extraction using XXX methodology that does Y.
 
@@ -226,7 +253,7 @@ class Fetcher:
 		LogoUrl: str = ''
 		return None
 
-	async def _InsertLogoIntoDb(self, RowId: int, LogoUrl: str, Method: str) -> None:
+	async def _InsertLogoIntoDb(self, RowId: int, LogoUrl: str, Method: str, Confidence: float) -> None:
 		"""
 		Method that exclusively deals with inserting logos into the database.
 
@@ -240,9 +267,9 @@ class Fetcher:
 		"""
 		self._conn.execute(''''
 					UPDATE domains
-					SET logo_url = ?, extraction_method = ?
+					SET logo_url = ?, extraction_method = ?, confidence_score = ?
 					WHERE id = ?
-					''', (LogoUrl, Method, RowId))
+					''', (LogoUrl, Method, Confidence, RowId))
 
 	async def _FaviconExtraction(self, HtmlBody: str, Domain: str) -> Optional[str]:
 		"""
