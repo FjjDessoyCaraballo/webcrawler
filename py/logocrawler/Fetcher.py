@@ -46,7 +46,7 @@ class Fetcher:
 				print(f'[{RowId}] 🔴 Failed to extract logo for {Domain}')
 			print(f'[{RowId}] 🟢 extracted logo of {Domain}')
 
-	async def _ScanHtml(self, RowId: int, HtmlBody: str, Domain: str) -> bool:
+	def _ScanHtml(self, RowId: int, HtmlBody: str, Domain: str) -> bool:
 		"""
 		Method to scan the HTML and find which method we are using to extract the logo.
 		
@@ -84,7 +84,7 @@ class Fetcher:
 
 		return False
 
-	async def _SvgMethod(self, HtmlBody: str, Domain: str):
+	def _SvgMethod(self, HtmlBody: str, Domain: str):
 		"""
 		Method #1 for logo extraction by converting SVG into URL data methodology using base64.
 
@@ -108,7 +108,7 @@ class Fetcher:
 		for SvgContent, Context in AllSvgs:
 			Score = self._CalculateProbabilityScore(SvgContent, Context)
 			if Score > 0:
-				ScoredSvgs.append(SvgContent, Score)
+				ScoredSvgs.append((SvgContent, Score))
 		
 		# AI used here: helped with the lambda syntax in max
 		WinnerSvg = max(ScoredSvgs, key=lambda x: x[1])[0]
@@ -128,7 +128,7 @@ class Fetcher:
 		SvgBase64 = base64.b64encode(SvgBytes).decode('utf-8')
 		return f'data:image/svg+xml;base64,{SvgBase64}'
 
-	async def _CalculateProbabilityScore(self, Content: str, Context: str) -> float:
+	def _CalculateProbabilityScore(self, Content: str, Context: str) -> float:
 		"""
 		Method to calculate the likelihood that the tag we got contains a logo. The scale
 		goes form zero (0) to one (1).
@@ -171,11 +171,13 @@ class Fetcher:
 			'class="brand': 0.3,
 			'class="header': 0.2,
 
-			# Source patterns
-    		'src="logo': 0.3,
-        	'src="brand': 0.3,
-        	'href="logo': 0.2,
-        	'href="#logo': 0.3,
+			# tag specifics
+    		'src="logo': 0.3, # IMG
+        	'src="brand': 0.3, # IMG
+        	'href="logo': 0.2, # IMG
+        	'href="#logo': 0.3, # IMG
+			'alt="logo': 0.3, # IMG
+			'viewbox=': 0.1, # SVG
 		}
 
 		for indicator, weight in PositiveIndicators.items():
@@ -184,7 +186,7 @@ class Fetcher:
 				# will be a string called logo and the indicator will be the corresponding
 				# score of "logo", which is 0.4 in our dictionary.
 				# If there is a match, we add weight into our final score. 
-				score += weight
+				Score += weight
 
 		# Use of AI: Also used AI to compile items for the negative indicators list.
 		NegativeIndicators = {
@@ -201,15 +203,15 @@ class Fetcher:
 			if indicator in ContentLowerCase or indicator in ContextLowerCase:
 				# In the same way as we compiled the score with positive indicators, the
 				# negative indicators are meant to keep us clear from false-positives.
-				score -= penalty
+				Score -= penalty
 
-		return max(0.0, min(1.0, score))
+		return max(0.0, min(1.0, Score))
 
-	async def _FindAllSvgs(self, HtmlBody: str) -> List[Tuple[str, str]]:
+	def _FindAllSvgs(self, HtmlBody: str) -> List[Tuple[str, str]]:
 		svgs = []
 
 		# regex pattern for SVG tags
-		pattern = r'<svg[^>]*>.*?</svg>'
+		pattern = r'(.{0,200})<svg[^>]*>.*?</svg>(.{0,200})'
 
 		# IGNORECASE - case insensitive
 		# DOTALL - make dot match newlines too
@@ -225,7 +227,7 @@ class Fetcher:
 
 		return svgs
 
-	async def _ImgMethod(self, HtmlBody: str, Domain: str):
+	def _ImgMethod(self, HtmlBody: str, Domain: str):
 		"""
 		Method #2 for logo extraction using XXX methodology that does Y.
 
@@ -237,10 +239,9 @@ class Fetcher:
 		"""
 		LogoUrl: str = ''
 		return None
-	
-	
 
-	async def _CustomTagMethod(self, HtmlBody: str, Domain: str):
+
+	def _CustomTagMethod(self, HtmlBody: str, Domain: str):
 		"""
 		Method #3 for logo extraction using XXX methodology that does Y.
 
@@ -270,6 +271,7 @@ class Fetcher:
 					SET logo_url = ?, extraction_method = ?, confidence_score = ?
 					WHERE id = ?
 					''', (LogoUrl, Method, Confidence, RowId))
+		self._conn.commit()
 
 	async def _FaviconExtraction(self, HtmlBody: str, Domain: str) -> Optional[str]:
 		"""
@@ -299,6 +301,7 @@ class Fetcher:
 					SET favicon_url = ?, extraction_method = ?
 					WHERE id = ?
 					''', (Favicon, Method, RowId))
+		self._conn.commit()
 		print(f'[{RowId}] 🟡 Favicon extracted')
 
 	def UnloadDatabaseToCsv(self):
