@@ -85,7 +85,7 @@ class Fetcher:
 
 	async def _SVGMethod(self, HtmlBody: str, Domain: str):
 		"""
-		Method X for logo extraction using XXX methodology that does Y.
+		Method #1 for logo extraction by converting SVG into URL data methodology using base64.
 
 		:Parameter: HtmlBody string of the index.html of given domain in database.
 		
@@ -98,7 +98,7 @@ class Fetcher:
 
 	async def _IMGMethod(self, HtmlBody: str, Domain: str):
 		"""
-		Method X for logo extraction using XXX methodology that does Y.
+		Method #2 for logo extraction using XXX methodology that does Y.
 
 		:Parameter: HtmlBody string of the index.html of given domain in database.
 		
@@ -111,7 +111,7 @@ class Fetcher:
 
 	async def _CustomTagMethod(self, HtmlBody: str, Domain: str):
 		"""
-		Method X for logo extraction using XXX methodology that does Y.
+		Method #3 for logo extraction using XXX methodology that does Y.
 
 		:Parameter: HtmlBody string of the index.html of given domain in database.
 		
@@ -163,4 +163,9 @@ class Fetcher:
 
 		:Parameter: Method methodology used to obtain logo.
 		"""
-		return
+		self._conn.execute(''''
+					UPDATE domains
+					SET favicon_url = ?, extraction_method = ?
+					WHERE id = ?
+					''', (Favicon, Method, RowId))
+		print(f'[{RowId}] 🟡 Favicon extracted')
