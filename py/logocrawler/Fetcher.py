@@ -1,22 +1,27 @@
 import os
 import csv
 import sqlite3
+import asyncio
 from typing import Optional, Tuple, List, Union
 
 class Fetcher:
 	def __init__(self):
 		self._conn: sqlite3.Connection = []
 		self._rows = ()
-		return
 	
 	def EntryPoint(self, DbPath: str) -> bool:
 		if DbPath == '':
-			exit(print('Error: database not found'))
-		self._conn = sqlite3.connect(DbPath)
-		Cursor = self._FetchRows()
-		self._ProcessRows(Cursor)
-		print('Executed to the end')
-		self._conn.close()
+			print('Error: database not found')
+			return False
+		try:
+			self._conn = sqlite3.connect(DbPath)
+			Cursor = self._FetchRows()
+			asyncio(self._ProcessRows(Cursor))
+			print('Executed to the end')
+			self._conn.close()
+		except Exception as e:
+			print(f'Error: {e}')
+			return False
 		return True
 	
 	def _FetchRows(self) -> sqlite3.Cursor:
@@ -31,23 +36,51 @@ class Fetcher:
 		cursor: sqlite3.Cursor = self._conn.execute(query)
 		return cursor
 	
-	def _ProcessRows(self, Cursor: sqlite3.Cursor):
+	async def _ProcessRows(self, Cursor: sqlite3.Cursor):
 		row: Tuple[int, str, str, str]
 		for row in Cursor:
 			RowId, Domain, HtmlBody, FinalUrl = row
 			print(f'[{RowId}] 🔵 Attemping to extract logo for {Domain}')
 			self._ScanHtml(HtmlBody)
-			break
-		return
-	
-	def _ScanHtml(self, RowId: int, HtmlBody: str):
+
+	async def _ScanHtml(self, RowId: int, HtmlBody: str) -> str:
 		"""
 		Method to scan the HTML and find which method we are using to extract the logo.
 		"""
-		print(HtmlBody)
+		LogoUrl: str
+
+		# Method 1: SVG tags
+		LogoUrl = self._SVGMethod()
+		if LogoUrl is not None:
+			self._InsertLogoIntoDb(RowId, LogoUrl, 'SVG_TAG')
+			return
+
+		# Method 2: img tags
+		LogoUrl = self._IMGMethod()
+		if LogoUrl is not None:
+			self._InsertLogoIntoDb(RowId, LogoUrl, 'IMG_TAG')
+			return
+		
+		# Method 3: custom tags
+		LogoUrl = self._CustomTagMethod()
+		if LogoUrl is not None:
+			self._InsertLogoIntoDb(RowId, LogoUrl, 'CUSTOM_TAG')
+			return
+		
+		# favicon?
+
+		return None
+
+	async def _SVGMethod(self):
 		return
 
-	def _InsertLogoIntoDb(self, RowId: int, LogoUrl: str, Method: str) -> None:
+	async def _IMGMethod(self):
+		return
+
+	async def _CustomTagMethod(self):
+		return
+
+	async def _InsertLogoIntoDb(self, RowId: int, LogoUrl: str, Method: str) -> None:
 		return
 
 	# fetch a row from a domain that returned status code 200

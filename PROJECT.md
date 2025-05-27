@@ -31,8 +31,12 @@ I am trying to work with built-in libraries as much as possible. So far, the onl
 
 ## Sources
 
-- About web crawling in general: [1](https://www.cloudflare.com/learning/bots/what-is-a-web-crawler/)
-- About robot.txt: [1](https://developers.google.com/search/docs/crawling-indexing/robots/intro) [2](https://moz.com/learn/seo/robotstxt)
+- About web crawling in general: [[1]](https://www.cloudflare.com/learning/bots/what-is-a-web-crawler/)
+- About robot.txt: [[1]](https://developers.google.com/search/docs/crawling-indexing/robots/intro) [[2]](https://moz.com/learn/seo/robotstxt)
+- About SVGs: [[1]](https://www.adobe.com/creativecloud/file-types/image/vector/svg-file.html) [[2]](https://developer.mozilla.org/en-US/docs/Web/SVG)
+- Base64 encoding: [[1]](https://www.lifewire.com/base64-encoding-overview-1166412)
+- aiohttp documentation: [[1]](https://docs.aiohttp.org/en/stable/)
+- SQLite3 documentation: [[1]](https://www.sqlite.org/docs.html)
 
 ## Current schema of the database
 
