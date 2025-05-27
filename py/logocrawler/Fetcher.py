@@ -1,3 +1,4 @@
+import os
 import base64
 import re
 import csv
@@ -7,12 +8,12 @@ from typing import Optional, Tuple, List, Union
 
 class Fetcher:
 	def __init__(self):
-		self._conn: sqlite3.Connection = []
+		self._conn: Optional[sqlite3.Connection] = None
 		self._rows = ()
 	
 	def EntryPoint(self, DbPath: str) -> bool:
-		if DbPath == '':
-			print('Error: database not found')
+		if not DbPath or not os.path.exists(DbPath):
+			print(f'Error: database not found in path {DbPath}')
 			return False
 		try:
 			self._conn = sqlite3.connect(DbPath)
@@ -21,6 +22,9 @@ class Fetcher:
 			print('Executed to the end')
 			self._conn.close()
 			return True
+		except sqlite3.OperationalError as e:
+			print(f'Database connectione error: {e}')
+			return False
 		except Exception as e:
 			print(f'Error: {e}')
 			return False
@@ -38,13 +42,40 @@ class Fetcher:
 		return cursor
 	
 	async def _ProcessRows(self, Cursor: sqlite3.Cursor):
+		"""
+		adhajshdjh
+		"""
 		row: Tuple[int, str, str, str]
-		for row in Cursor:
-			RowId, Domain, HtmlBody, FinalUrl = row
-			print(f'[{RowId}] Attemping to extract logo for {Domain}')
-			if self._ScanHtml(RowId, HtmlBody, FinalUrl) == False:
-				print(f'[{RowId}] 🔴 Failed to extract logo for {Domain}')
-			print(f'[{RowId}] 🟢 extracted logo of {Domain}')
+		processed: int = 0
+		error: int = 0
+
+		try:
+			for row in Cursor:
+				RowId, Domain, HtmlBody, FinalUrl = row
+				print(f'[{RowId}] Attemping to extract logo for {Domain}')
+				try:
+					if self._ScanHtml(RowId, HtmlBody, FinalUrl):
+						processed += 1
+						print(f'[{RowId}] 🟢 extracted logo of {Domain}')
+					else:
+						error += 1
+						print(f'[{RowId}] 🔴 Failed to extract logo for {Domain}')
+				except Exception as e:
+					error += 1
+					print(f'[{RowId}] Error processing {Domain}: {e}')
+					continue
+
+			self._conn.commit()
+			print(f'\nTransaction completed: {processed} processed, {error} errors')
+		except sqlite3.DatabaseError as e:
+			self.conn.rollback()
+			print(f'Transaction rolled back on database error: {e}')
+		except Exception as e:
+			self.conn.rollback()
+			print(f'Transaction rolled back on unknown error: {e}')
+
+
+
 
 	def _ScanHtml(self, RowId: int, HtmlBody: str, Domain: str) -> bool:
 		"""
@@ -255,7 +286,7 @@ class Fetcher:
 		
 		WinnerImg = max(ScoredImg, key=lambda x: x[1])[0]
 		# no base64 here, need to find something else to do
-		return None
+		return LogoUrl
 
 
 	def _CustomTagMethod(self, HtmlBody: str, Domain: str):
@@ -283,12 +314,24 @@ class Fetcher:
 		
 		:Returns: None
 		"""
-		self._conn.execute(''''
-					UPDATE domains
-					SET logo_url = ?, extraction_method = ?, confidence_score = ?
-					WHERE id = ?
-					''', (LogoUrl, Method, Confidence, RowId))
-		self._conn.commit()
+		try:
+			self._conn.execute(''''
+						UPDATE domains
+						SET logo_url = ?, extraction_method = ?, confidence_score = ?
+						WHERE id = ?
+						''', (LogoUrl, Method, Confidence, RowId))
+		except sqlite3.IntegrityError as e:
+			print(f"Database integrity error for row {RowId}: {e}")
+			return False
+		except sqlite3.OperationalError as e:
+			print(f"Database operation failed for row {RowId}: {e}")
+			return False
+		except sqlite3.DatabaseError as e:
+			print(f"Database error for row {RowId}: {e}")
+			return False
+		except Exception as e:
+			print(f"Unexpected error updating row {RowId}: {e}")
+			return False
 
 	async def _FaviconExtraction(self, HtmlBody: str, Domain: str) -> Optional[str]:
 		"""
@@ -313,13 +356,25 @@ class Fetcher:
 
 		:Parameter: Method methodology used to obtain logo.
 		"""
-		self._conn.execute(''''
-					UPDATE domains
-					SET favicon_url = ?, extraction_method = ?
-					WHERE id = ?
-					''', (Favicon, Method, RowId))
-		self._conn.commit()
-		print(f'[{RowId}] 🟡 Favicon extracted')
+		try:
+			self._conn.execute(''''
+						UPDATE domains
+						SET favicon_url = ?, extraction_method = ?
+						WHERE id = ?
+						''', (Favicon, Method, RowId))
+			print(f'[{RowId}] 🟡 Favicon extracted')
+		except sqlite3.IntegrityError as e:
+			print(f"Database integrity error for row {RowId}: {e}")
+			return False
+		except sqlite3.OperationalError as e:
+			print(f"Database operation failed for row {RowId}: {e}")
+			return False
+		except sqlite3.DatabaseError as e:
+			print(f"Database error for row {RowId}: {e}")
+			return False
+		except Exception as e:
+			print(f"Unexpected error updating row {RowId}: {e}")
+			return False
 
 	def UnloadDatabaseToCsv(self):
 		"""
