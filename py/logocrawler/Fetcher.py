@@ -98,17 +98,17 @@ class Fetcher:
 		Score: float = 0.0
 		AllSvgs: List[Tuple[str, str]] = []
 
-		AllSvgs = self._FindAllSvgs(HtmlBody)
+		AllSvgs = self._FindAllTags(HtmlBody, r'(.{0,200})<svg[^>]*>.*?</svg>(.{0,200})')
 		
 		if not AllSvgs:
 			return None
 		
 		ScoredSvgs: List[Tuple[str, str]] = []
 
-		for SvgContent, Context in AllSvgs:
-			Score = self._CalculateProbabilityScore(SvgContent, Context)
+		for Content, Context in AllSvgs:
+			Score = self._CalculateProbabilityScore(Content, Context)
 			if Score > 0:
-				ScoredSvgs.append((SvgContent, Score))
+				ScoredSvgs.append((Content, Score))
 		
 		# AI used here: helped with the lambda syntax in max
 		WinnerSvg = max(ScoredSvgs, key=lambda x: x[1])[0]
@@ -207,11 +207,15 @@ class Fetcher:
 
 		return max(0.0, min(1.0, Score))
 
-	def _FindAllSvgs(self, HtmlBody: str) -> List[Tuple[str, str]]:
-		svgs = []
+	def _FindAllTags(self, HtmlBody: str, pattern: str) -> List[Tuple[str, str]]:
+		"""
+		Method for extraction of all tags that match the regex pattern.
 
-		# regex pattern for SVG tags
-		pattern = r'(.{0,200})<svg[^>]*>.*?</svg>(.{0,200})'
+		:Parameter:
+
+		:Returns: AllTags
+		"""
+		AllTags = []
 
 		# IGNORECASE - case insensitive
 		# DOTALL - make dot match newlines too
@@ -219,13 +223,13 @@ class Fetcher:
 
 		for match in matches:
 			BeforeContext = match.group1(1)
-			SvgContent = match.group(0)[len(match.group(1)):-len(match.group(2))]
+			Content = match.group(0)[len(match.group(1)):-len(match.group(2))]
 			AfterContext = match.group(2)
 
 			Context = BeforeContext + AfterContext
-			svgs.append((SvgContent, Context))
+			AllTags.append((Content, Context))
 
-		return svgs
+		return AllTags
 
 	def _ImgMethod(self, HtmlBody: str, Domain: str):
 		"""
@@ -238,6 +242,19 @@ class Fetcher:
 		:Returns: LogoUrl string containing URL of logo image. Returns None if method fails to find logo.
 		"""
 		LogoUrl: str = ''
+		Score: float = 0.0
+		imgs: list[Tuple[str, str]] = []
+
+		imgs = self._FindAllTags(HtmlBody, r'(.{0,200})<img[^>]*>.*?</img>(.{0,200})')
+
+		ScoredImg: list[Tuple[str, str]] = []
+		for Content, Context in imgs:
+			Score = self._CalculateProbabilityScore(Content, Context)
+			if Score > 0:
+				ScoredImg.append((Content, Score))
+		
+		WinnerImg = max(ScoredImg, key=lambda x: x[1])[0]
+		# no base64 here, need to find something else to do
 		return None
 
 
