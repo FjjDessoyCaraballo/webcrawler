@@ -101,7 +101,8 @@ class Crawler:
 			ssl_context=ssl_context
 		)
 		
-		timeout = aiohttp.ClientTimeout(total=15, connect=10)
+		# the parameters of the timeout should probably be defined from other variables inherited from the parent process
+		timeout = aiohttp.ClientTimeout(total=15, connect=10) # change timeout according to connection and latency
 		
 		# AI helped me here to get a more 'human-like' header
 		headers = {

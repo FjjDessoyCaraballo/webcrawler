@@ -1,4 +1,5 @@
-import os
+import base64
+import re
 import csv
 import sqlite3
 import asyncio
@@ -94,7 +95,108 @@ class Fetcher:
 		:Returns: LogoUrl string containing URL of logo image. Returns None if method fails to find logo.
 		"""
 		LogoUrl: str = ''
+		Score: float = 0.0
+		AllSvgs: List[Tuple[str, str]] = []
+
+		AllSvgs = self._FindAllSvgs(HtmlBody)
+		
+		if not AllSvgs:
+			return None
+		
+		ScoredSvgs: List[Tuple[str, str]] = []
+
+		for SvgContent, Context in AllSvgs:
+			Score = self._CalculateProbabilityScore(SvgContent, Context)
+
 		return None
+
+	async def _CalculateProbabilityScore(self, SvgContent: str, Context: str) -> float:
+		"""
+		Method to calculate the likelihood that the SVG tag we got contains a logo. The scale
+		goes form zero (0) to one (1).
+
+		:Parameter: SvgContent is a string that contains the content inside the SVG tag.
+		
+		:Parameter: Context is a string that contains everything between opening and closing svg tag.
+
+		:Returns: FinalScore is a float which dictates how fair the extract scored.
+		"""
+		Score: float = 0.0
+		
+		# Make everything lower case to have a standard baseline
+		SvgContentLowerCase = SvgContent.lower()
+		ContextLowerCase = Context.lower()
+
+		# AI used: I used AI to find a way to structure a scoring point system for the SVGs
+		# so the values are a bit arbitrary
+		PositiveIndicators = {
+			# Direct references to logo
+			'logo': 0.4,
+			'brand': 0.3,
+			'company': 0.2,
+
+			# Structural indicators (usually you can see logos in the headers)
+			'header': 0.2,
+			'nav': 0.2,
+			'navbar': 0.2,
+			'top': 0.1,
+
+			# Semantic indicators
+			# 'src=' 0.2 # SVGs apparently cannot do src
+			'aria-label': 0.2,
+			'title=': 0.1,
+			'alt=': 0.1,
+
+			# ID patterns
+			'class="logo': 0.4,
+			'id="logo': 0.4,
+			'class="brand': 0.3,
+			'class="header': 0.2,
+		}
+
+		for indicator, weight in PositiveIndicators.items():
+			if indicator in SvgContentLowerCase or indicator in ContextLowerCase:
+				# If we find a string in the tag that says "logo", the indicator
+				# will be a string called logo and the indicator will be the corresponding
+				# score of "logo", which is 0.4 in our dictionary.
+				# If there is a match, we add weight into our final score. 
+				score += weight
+
+		# Use of AI: Also used AI to compile items for the negative indicators list.
+		NegativeIndicators = {
+			'icon': 0.2,
+			'arrow': 0.3,
+			'close': 0.4,
+			'menu': 0.2,
+			'search': 0.3,
+			'social': 0.2,
+			'footer': 0.2,
+		}
+
+		for indicator, penalty in NegativeIndicators.items():
+			if indicator in SvgContentLowerCase or indicator in ContextLowerCase:
+				# In the same way as we compiled the score with positive indicators, the
+				# negative indicators are meant to keep us clear from false-positives.
+				score -= penalty
+
+		return max(0.0, min(1.0, score))
+
+	async def _FindAllSvgs(self, HtmlBody: str) -> List[Tuple[str, str]]:
+		svgs = []
+
+		# regex pattern for SVG tags
+		pattern = r'<svg[^>]*>.*?</svg>'
+		matches = re.finditer(pattern, HtmlBody, re.DOTALL | re.IGNORECASE)
+
+		for match in matches:
+			BeforeContext = match.group1(1)
+			SvgContent = match.group(0)[len(match.group(1)):-len(match.group(2))]
+			AfterContext = match.group(2)
+
+			Context = BeforeContext + AfterContext
+			svgs.append((SvgContent, Context))
+
+		return svgs
 
 	async def _IMGMethod(self, HtmlBody: str, Domain: str):
 		"""
@@ -108,6 +210,8 @@ class Fetcher:
 		"""
 		LogoUrl: str = ''
 		return None
+	
+	
 
 	async def _CustomTagMethod(self, HtmlBody: str, Domain: str):
 		"""
@@ -169,3 +273,34 @@ class Fetcher:
 					WHERE id = ?
 					''', (Favicon, Method, RowId))
 		print(f'[{RowId}] 🟡 Favicon extracted')
+
+	def UnloadDatabaseToCsv(self):
+		"""
+		Method to output CSV transcription of resulting database after Fetcher operations are done. Takes no parameters.
+
+		:Returns: True is successful. False if it fails.
+		"""
+		try:
+			Cursor = self._conn.cursor()
+			
+			# Cursor.execute("SELECT name FROM sqlite_master WHERE type='table';") # gonna reformulate the SQL query
+			TableName = Cursor.fetchone()[0]
+			
+			Cursor.execute(f"SELECT * FROM {TableName}")
+			data = Cursor.fetchall()
+			
+			ColumnNames = [description[0] for description in Cursor.description]
+			
+			with open(f"{TableName}.csv", 'w', newline='', encoding='utf-8') as csvfile:
+				writer = csv.writer(csvfile)
+				
+				writer.writerow(ColumnNames)
+				
+				writer.writerows(data)
+			
+			print(f"Successfully exported to {TableName}.csv")
+			return True
+			
+		except Exception as e:
+			print(f"Export failed: {str(e)}")
+			return False
