@@ -17,9 +17,10 @@ class Fetcher:
 			return False
 		try:
 			self._conn = sqlite3.connect(DbPath)
+			# Making the concious choice of not checking integrity of connection 
+			# and if database is locked.
 			Cursor = self._FetchRows()
 			asyncio(self._ProcessRows(Cursor))
-			print('Executed to the end')
 			self._conn.close()
 			return True
 		except sqlite3.OperationalError as e:
@@ -79,7 +80,8 @@ class Fetcher:
 
 	def _ScanHtml(self, RowId: int, HtmlBody: str, Domain: str) -> bool:
 		"""
-		Method to scan the HTML and find which method we are using to extract the logo.
+		Method to scan the HTML and find which method we are using to extract the logo. I'm using a waterfall
+		method to try through different methodologies of extraction. If one succeeds we return.
 		
 		:Parameter: RowId integer representing which row of the database the HTML body is from.
 
