@@ -3,8 +3,9 @@ import base64
 import re
 import csv
 import sqlite3
-import asyncio
-from typing import Optional, Tuple, List, Union
+from urllib.parse import urljoin, urlparse
+from typing import Optional, Tuple, List
+
 
 class Fetcher:
 	def __init__(self):
@@ -28,7 +29,8 @@ class Fetcher:
 			# Making the concious choice of not checking integrity of connection 
 			# and if database is locked.
 			Cursor = self._FetchRows()
-			asyncio(self._ProcessRows(Cursor))
+			self._ProcessRows(Cursor)
+			self._UnloadDatabaseToCsv
 			self._conn.close()
 			return True
 		except sqlite3.OperationalError as e:
@@ -50,7 +52,7 @@ class Fetcher:
 		cursor: sqlite3.Cursor = self._conn.execute(query)
 		return cursor
 	
-	async def _ProcessRows(self, Cursor: sqlite3.Cursor):
+	def _ProcessRows(self, Cursor: sqlite3.Cursor):
 		"""
 		Method for extracting and processing the html_body column. Additional information is being
 		sent downstream, such as id and final_url to help facilitate error handling and processing 
@@ -147,7 +149,7 @@ class Fetcher:
 		if not AllSvgs:
 			return None
 		
-		ScoredSvgs: List[Tuple[str, str]] = []
+		ScoredSvgs: List[Tuple[str, float]] = []
 
 		for Content, Context in AllSvgs:
 			Score = self._CalculateProbabilityScore(Content, Context)
@@ -219,8 +221,8 @@ class Fetcher:
 			# tag specifics
     		'src="logo': 0.3, # IMG
         	'src="brand': 0.3, # IMG
-        	'href="logo': 0.2, # IMG
-        	'href="#logo': 0.3, # IMG
+        	'href="logo': 0.2, # A TAG
+        	'href="#logo': 0.3, # A TAG
 			'alt="logo': 0.3, # IMG
 			'viewbox=': 0.1, # SVG
 		}
@@ -276,9 +278,42 @@ class Fetcher:
 
 		return AllTags
 
+	def _MakeAbsoluteUrl(self, Url: str, BaseUrl: str) -> str:
+		"""
+		The first parameter is the URL that was taken from a tag. Therefore we do not properly
+		know what we might be getting. The second argument comes from our database, which we can
+		expect to be correct since we are only working with the URLs where we had status code 200.
+
+		:Parameter: Url a string that possibly is an URL to the logo
+
+		:Parameter: BaseUrl a string of the domain taken from final_url in the database.
+
+		:Returns: The method returns an absolute URL path to the image. If URL is absent it returns None.
+		"""
+		if not Url:
+			return ''
+		
+		# Clause to check if path is already absolute
+		if Url.startswith(('http://', 'https://', 'data:')):
+			return Url
+		
+		AbsoluteUrl: str = ''
+
+		# URL is protocol sensitive
+		if Url.startswith('//'):
+			ParsedBase = urlparse(BaseUrl)
+			AbsoluteUrl = f'{ParsedBase.scheme}:{Url}'
+			return AbsoluteUrl
+		
+		AbsoluteUrl = urljoin(BaseUrl, Url)
+		
+		return AbsoluteUrl
+
 	def _ImgMethod(self, HtmlBody: str, Domain: str):
 		"""
-		Method #2 for logo extraction using XXX methodology that does Y.
+		Method #2 for logo extraction looking for `<img>` tags in the HTML body. This method is a first fallback
+		from the SVG method, and maybe not as fruitful as the SvgMethod, but it is better than searching for other
+		different tags. In sum, this method should score less than the SVG, but more than the custom tag method.
 
 		:Parameter: HtmlBody string of the index.html of given domain in database.
 		
@@ -292,20 +327,32 @@ class Fetcher:
 
 		imgs = self._FindAllTags(HtmlBody, r'(.{0,200})<img[^>]*>.*?</img>(.{0,200})')
 
-		ScoredImg: list[Tuple[str, str]] = []
+		if not imgs:
+			return None
+
+		ScoredImg: list[Tuple[str, str, float]] = []
 		for Content, Context in imgs:
 			Score = self._CalculateProbabilityScore(Content, Context)
 			if Score > 0:
-				ScoredImg.append((Content, Score))
+				SourceMatch = re.search(r'src=["\']([^"\']+)["\']', Content, re.IGNORECASE)
+				if SourceMatch:
+					SourceUrl = SourceMatch.group(1)
+					AbsoluteUrl = self._MakeAbsoluteUrl(SourceUrl, Domain)
+					ScoredImg.append((AbsoluteUrl, Content, Score))
 		
-		WinnerImg = max(ScoredImg, key=lambda x: x[1])[0]
-		# no base64 here, need to find something else to do
+		if not ScoredImg:
+			return None
+		
+		WinnerImg = max(ScoredImg, key=lambda x: x[2])
+		LogoUrl = WinnerImg[0]
 		return LogoUrl
 
 
 	def _CustomTagMethod(self, HtmlBody: str, Domain: str):
 		"""
-		Method #3 for logo extraction using XXX methodology that does Y.
+		Method #3 for logo extraction by searching for `a`, `div`, and `span` tags. This method is burdensome 
+		since divs are plentiful and the likelihood of finding the logo inside these tags is lower. Therefore
+		the confidence score of this method is lower.
 
 		:Parameter: HtmlBody string of the index.html of given domain in database.
 		
@@ -314,6 +361,19 @@ class Fetcher:
 		:Returns: LogoUrl string containing URL of logo image. Returns None if method fails to find logo.
 		"""
 		LogoUrl: str = ''
+		patterns = [
+			r'<a[^>]*class=["\'][^"\']*logo[^"\']*["\'][^>]*style=["\'][^"\']*background-image:\s*url\(["\']?([^"\')\s]+)["\']?\)[^"\']*["\'][^>]*>',
+			r'<div[^>]*class=["\'][^"\']*logo[^"\']*["\'][^>]*style=["\'][^"\']*background-image:\s*url\(["\']?([^"\')\s]+)["\']?\)[^"\']*["\'][^>]*>',
+			r'<span[^>]*class=["\'][^"\']*logo[^"\']*["\'][^>]*style=["\'][^"\']*background-image:\s*url\(["\']?([^"\')\s]+)["\']?\)[^"\']*["\'][^>]*>'
+		]
+
+		for pattern in patterns:
+			match = re.search(pattern, HtmlBody, re.IGNORECASE)
+			if match:
+				BackgroundUrl = match.group(1)
+				LogoUrl = self._MakeAbsoluteUrl(BackgroundUrl, Domain)
+				return LogoUrl
+
 		return None
 
 	async def _InsertLogoIntoDb(self, RowId: int, LogoUrl: str, Method: str, Confidence: float) -> None:
@@ -358,7 +418,25 @@ class Fetcher:
 		:Returns: Favicon URL in string if successful. None is returned in case of failure.
 		"""
 		Favicon: str = ''
-		return Favicon
+		patterns = [
+			r'<link[^>]*rel=["\'](?:shortcut )?icon["\'][^>]*href=["\']([^"\']+)["\']',
+			r'<link[^>]*href=["\']([^"\']+)["\'][^>]*rel=["\'](?:shortcut )?icon["\']',
+			r'<link[^>]*rel=["\']apple-touch-icon["\'][^>]*href=["\']([^"\']+)["\']'
+		]
+
+		for pattern in patterns:
+			match = re.search(pattern, HtmlBody, re.IGNORECASE)
+			if match:
+				FaviconUrl = match.group(1)
+				Favicon = self._MakeAbsoluteUrl(FaviconUrl, Domain)
+				return Favicon
+
+		## Fallback method (not going to include to the final submission because it may yield false results)
+		# ParsedUrl = urlparse(Domain)
+		# Favicon = f'{ParsedUrl.scheme}://{ParsedUrl.netloc}/favicon.ico'
+		# return Favicon
+
+		return None
 	
 	async def _InsertFavicon(self, RowId: int, Favicon: str, Method: str) -> None:
 		"""
@@ -390,7 +468,7 @@ class Fetcher:
 			print(f"Unexpected error updating row {RowId}: {e}")
 			return False
 
-	def UnloadDatabaseToCsv(self):
+	def _UnloadDatabaseToCsv(self) -> bool:
 		"""
 		Method to output CSV transcription of resulting database after Fetcher operations are done. Takes no parameters.
 
@@ -400,21 +478,20 @@ class Fetcher:
 			Cursor = self._conn.cursor()
 			
 			# Cursor.execute("SELECT name FROM sqlite_master WHERE type='table';") # gonna reformulate the SQL query
-			TableName = Cursor.fetchone()[0]
+			CsvName = "websites_logos.csv"
 			
-			Cursor.execute(f"SELECT * FROM {TableName}")
+			Cursor.execute('''
+				SELECT domain, logo_url, fetch_status, robots_txt 
+				FROM domains
+				''')
 			data = Cursor.fetchall()
 			
-			ColumnNames = [description[0] for description in Cursor.description]
-			
-			with open(f"{TableName}.csv", 'w', newline='', encoding='utf-8') as csvfile:
+			with open(f"{CsvName}.csv", 'w', newline='', encoding='utf-8') as csvfile:
 				writer = csv.writer(csvfile)
-				
-				writer.writerow(ColumnNames)
-				
+				writer.writerow(['domain', 'logo_url', 'fetch_status', 'robots_txt'])
 				writer.writerows(data)
 			
-			print(f"Successfully exported to {TableName}.csv")
+			print(f"Successfully exported to {CsvName}.csv")
 			return True
 			
 		except Exception as e:

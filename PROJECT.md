@@ -29,6 +29,19 @@ To make the code clearer and separate tasks more accordingly, I believe it was a
 
 I am trying to work with built-in libraries as much as possible. So far, the only external libraries that have shown to be absolutely necessary are `sqlite3` and `aiohttp`.
 
+Built-in libraries used:
+
+- csv
+- random
+- os
+- sys
+- ssl
+- asyncio
+- urllib
+- re
+- base64
+- typing
+
 ## Sources
 
 - About web crawling in general: [[1]](https://www.cloudflare.com/learning/bots/what-is-a-web-crawler/)
@@ -68,14 +81,10 @@ I am trying to work with built-in libraries as much as possible. So far, the onl
 
 ### Extraction Methods (will definitely change with time)
 
-*IMG_TAG_ALT*: Found logo via `<img>` tag with "logo" in alt text
-*IMG_TAG_CLASS*: Found logo via `<img>` tag with "logo" in class name
+*IMG_TAG*: Found logo via `<img>` tag with "logo"
 *SVG_TAG*: Found logo via `<SVG>` tag with "logo"
 *CUSTOM_TAG*: Found logo via, for example, `<a>` tag with "logo"
-*CSS_BACKGROUND*: Found logo as CSS background image
-*SVG_ELEMENT*: Found logo as inline SVG element
-*FAVICON_LINK*: Used favicon as fallback logo
-*MANUAL_HEURISTIC*: Custom logic-based extraction
+*FAVICON*: Used favicon as fallback logo
 
 ### Confidence Scores
 
