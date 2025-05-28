@@ -12,6 +12,14 @@ class Fetcher:
 		self._rows = ()
 	
 	def EntryPoint(self, DbPath: str) -> bool:
+		"""
+		EntryPoint should be the only public method available for users to interact with `Fetcher`. Here we define the location of the
+		database and the class should handle everything by itself, including outputting the csv resulting file at the end.
+
+		:Parameters: DbPath a string containing the path to the database.
+
+		:Returns: True if successful. False if errors were found before being able to connect to database.
+		"""
 		if not DbPath or not os.path.exists(DbPath):
 			print(f'Error: database not found in path {DbPath}')
 			return False
@@ -24,7 +32,7 @@ class Fetcher:
 			self._conn.close()
 			return True
 		except sqlite3.OperationalError as e:
-			print(f'Database connectione error: {e}')
+			print(f'Database connection error: {e}')
 			return False
 		except Exception as e:
 			print(f'Error: {e}')
@@ -44,7 +52,13 @@ class Fetcher:
 	
 	async def _ProcessRows(self, Cursor: sqlite3.Cursor):
 		"""
-		adhajshdjh
+		Method for extracting and processing the html_body column. Additional information is being
+		sent downstream, such as id and final_url to help facilitate error handling and processing 
+		of the logo URL.
+
+		:Parameter: Cursor sqlite3.Cursor type that points to the database.
+
+		:Returns: None
 		"""
 		row: Tuple[int, str, str, str]
 		processed: int = 0
@@ -74,9 +88,6 @@ class Fetcher:
 		except Exception as e:
 			self.conn.rollback()
 			print(f'Transaction rolled back on unknown error: {e}')
-
-
-
 
 	def _ScanHtml(self, RowId: int, HtmlBody: str, Domain: str) -> bool:
 		"""
@@ -144,6 +155,7 @@ class Fetcher:
 				ScoredSvgs.append((Content, Score))
 		
 		# AI used here: helped with the lambda syntax in max
+		# There's still a chance to have two same score WinnerSvgs
 		WinnerSvg = max(ScoredSvgs, key=lambda x: x[1])[0]
 		LogoUrl = self._SvgToDataUrl(WinnerSvg)
 		return LogoUrl
