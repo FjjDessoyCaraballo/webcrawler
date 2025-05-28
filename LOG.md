@@ -66,3 +66,9 @@ I've divided the code into two clases: `Crawler` and `Fetcher` for modularizatio
 At this stage I need to start thinking about tests, and this assignment would require fancy tools to evaluate if the images are indeed compatible with the logos since there's >700 possibilities. I do not have all the time to thoroughly test all those, neither I want to automate this task because it would probably require external libraries. The solution seems to fetch batches of results an manually check corresponding results. This unit test may not be the most efficient, but it is a baseline.
 
 A more scalable solution for this issue would be to use Pillow (`PIL`) with `Imagehash` for image comparison.
+
+## May 28th
+
+I've made the conscious decision to not handle edge cases where the logo might've been linked to any tags but `<img>` and `<svg>`. The regex for those cases would've been overly complicated and was unfruitful in more than 90% of the `Fetcher` runs. For future reference, and to save my sanity, I should use the HTML parser instead of regexes.
+
+Tomorrow I should work on some tests and data visualizations for the interview.

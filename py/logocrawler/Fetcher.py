@@ -115,14 +115,11 @@ class Fetcher:
 
 		PossibleLogoSvg = self._SvgMethod(HtmlBody, Domain)
 		PossibleLogoImg = self._ImgMethod(HtmlBody, Domain)
-		PossibleLogoCustom = self._CustomTagMethod(HtmlBody, Domain)
 
-		AllResults = [PossibleLogoSvg, PossibleLogoImg, PossibleLogoCustom]
+		AllResults = [PossibleLogoSvg, PossibleLogoImg]
 		
-		print(f'SVG SCORE: {PossibleLogoSvg[1]}')
-		print(f'IMG SCORE: {PossibleLogoImg[1]}')
-		print(f'A SCORE: {PossibleLogoCustom[1]}')
-
+		print(f'SVG SCORE: {PossibleLogoSvg[1] if PossibleLogoSvg is not None else "None"}')
+		print(f'IMG SCORE: {PossibleLogoImg[1] if PossibleLogoImg is not None else "None"}')
 
 		for result in AllResults:
 			if result is not None:
@@ -131,11 +128,22 @@ class Fetcher:
 				elif isinstance(result, tuple) and len(result) == 2:
 					PossibleLogo.append(result)
 
-		WinnerPossibility = max(PossibleLogo, key=lambda x: x[1])
+		if not PossibleLogo:
+			print(f'[{RowId}] No logo candidates found')
+			return False
 		
-		self._InsertLogoIntoDb(RowId, WinnerPossibility[0], 'CUSTOM_TAG', 0.3)
+		WinnerPossibility = max(PossibleLogo, key=lambda x: x[1])
 
-		return False
+		if WinnerPossibility == PossibleLogoSvg:
+			method = 'SVG_TAG'
+		elif WinnerPossibility == PossibleLogoImg:
+			method = 'IMG_TAG'
+		# elif WinnerPossibility == PossibleLogoCustom:
+		# 	method = 'CUSTOM_TAG'
+		else:
+			method = 'UNKNOWN'
+
+		return self._InsertLogoIntoDb(RowId, WinnerPossibility[0], method, WinnerPossibility[1])
 
 	def _SvgMethod(self, HtmlBody: str, Domain: str) -> Tuple[str, float]:
 		"""
@@ -332,7 +340,7 @@ class Fetcher:
 		"""
 		imgs: list[Tuple[str, str]] = []
 
-		imgs = self._FindAllTags(HtmlBody, r'(.{0,200})<img[^>]*>.*?</img>(.{0,200})')
+		imgs = self._FindAllTags(HtmlBody, r'(.{0,200})<img[^>]*>(.{0,200})')
 
 		if not imgs:
 			return None
@@ -355,47 +363,47 @@ class Fetcher:
 		return WinnerImg[0], WinnerImg[2]
 
 
-	def _CustomTagMethod(self, HtmlBody: str, Domain: str):
-		"""
-		Method #3 for logo extraction by searching for `a`, `div`, and `span` tags. This method is burdensome 
-		since divs are plentiful and the likelihood of finding the logo inside these tags is lower. Therefore
-		the confidence score of this method is lower.
+	# def _CustomTagMethod(self, HtmlBody: str, Domain: str):
+	# 	"""
+	# 	Method #3 for logo extraction by searching for `a`, `div`, and `span` tags. This method is burdensome 
+	# 	since divs are plentiful and the likelihood of finding the logo inside these tags is lower. Therefore
+	# 	the confidence score of this method is lower.
 
-		:Parameter: HtmlBody string of the index.html of given domain in database.
+	# 	:Parameter: HtmlBody string of the index.html of given domain in database.
 		
-		:Parameter: Domain string containing the landing page/homepage of given domain.
+	# 	:Parameter: Domain string containing the landing page/homepage of given domain.
 
-		:Returns: LogoUrl string containing URL of logo image. Returns None if method fails to find logo.
-		"""
-		aTags = self._FindAllTags(HtmlBody, r'(.{0,200})<a[^>]*class=["\'][^"\']*logo[^"\']*["\'][^>]*style=["\'][^"\']*background-image:\s*url\(["\']?([^"\')\s]+)["\']?\)[^"\']*["\'][^>]*>(.{0,200})')
-		Divs = self._FindAllTags(HtmlBody, r'(.{0,200})<div[^>]*class=["\'][^"\']*logo[^"\']*["\'][^>]*style=["\'][^"\']*background-image:\s*url\(["\']?([^"\')\s]+)["\']?\)[^"\']*["\'][^>]*>(.{0,200})')
-		Spans = self._FindAllTags(HtmlBody, r'(.{0,200})<span[^>]*class=["\'][^"\']*logo[^"\']*["\'][^>]*style=["\'][^"\']*background-image:\s*url\(["\']?([^"\')\s]+)["\']?\)[^"\']*["\'][^>]*>(.{0,200})')
+	# 	:Returns: LogoUrl string containing URL of logo image. Returns None if method fails to find logo.
+	# 	"""
+	# 	aTags = self._FindAllTags(HtmlBody, r'(.{0,200})<a[^>]*class=["\'][^"\']*logo[^"\']*["\'][^>]*style=["\'][^"\']*background-image:\s*url\(["\']?([^"\')\s]+)["\']?\)[^"\']*["\'][^>]*>(.{0,200})')
+	# 	Divs = self._FindAllTags(HtmlBody, r'(.{0,200})<div[^>]*class=["\'][^"\']*logo[^"\']*["\'][^>]*style=["\'][^"\']*background-image:\s*url\(["\']?([^"\')\s]+)["\']?\)[^"\']*["\'][^>]*>(.{0,200})')
+	# 	Spans = self._FindAllTags(HtmlBody, r'(.{0,200})<span[^>]*class=["\'][^"\']*logo[^"\']*["\'][^>]*style=["\'][^"\']*background-image:\s*url\(["\']?([^"\')\s]+)["\']?\)[^"\']*["\'][^>]*>(.{0,200})')
 
-		Patterns: list[Tuple[str, str]] = []
-		Patterns.extend(aTags)
-		Patterns.extend(Divs)
-		Patterns.extend(Spans)
+	# 	Patterns: list[Tuple[str, str]] = []
+	# 	Patterns.extend(aTags)
+	# 	Patterns.extend(Divs)
+	# 	Patterns.extend(Spans)
 
-		if not Patterns:
-			return None
+	# 	if not Patterns:
+	# 		return None
 
-		ScoredTag: list[Tuple[str, float]] = []
+	# 	ScoredTag: list[Tuple[str, float]] = []
 
-		for Content, Context in Patterns:
-			Score = self._CalculateProbabilityScore(Content, Context)
-			if Score > 0:
-				BackgroundMatch = re.search(r'background-image:\s*url\(["\']?([^"\')\s]+)["\']?\)', Content, re.IGNORECASE)
-				if BackgroundMatch:
-					SourceUrl = BackgroundMatch.group(1)
-					AbsoluteUrl = self._MakeAbsoluteUrl(SourceUrl, Domain)
-					ScoredTag.append((AbsoluteUrl, Content, Score))
+	# 	for Content, Context in Patterns:
+	# 		Score = self._CalculateProbabilityScore(Content, Context)
+	# 		if Score > 0:
+	# 			BackgroundMatch = re.search(r'background-image:\s*url\(["\']?([^"\')\s]+)["\']?\)', Content, re.IGNORECASE)
+	# 			if BackgroundMatch:
+	# 				SourceUrl = BackgroundMatch.group(1)
+	# 				AbsoluteUrl = self._MakeAbsoluteUrl(SourceUrl, Domain)
+	# 				ScoredTag.append((AbsoluteUrl, Content, Score))
 		
-		if not ScoredTag:
-			return None
+	# 	if not ScoredTag:
+	# 		return None
 
-		WinnerTag = max(ScoredTag, key=lambda x: x[2])
+	# 	WinnerTag = max(ScoredTag, key=lambda x: x[2])
 		
-		return WinnerTag[0], WinnerTag[2]
+	# 	return WinnerTag[0], WinnerTag[2]
 
 	def _InsertLogoIntoDb(self, RowId: int, LogoUrl: str, Method: str, Confidence: float) -> None:
 		"""
@@ -415,6 +423,7 @@ class Fetcher:
 						SET logo_url = ?, extraction_method = ?, confidence_score = ?
 						WHERE id = ?
 						''', (LogoUrl, Method, Confidence, RowId))
+			return True
 		except sqlite3.IntegrityError as e:
 			print(f"Database integrity error for row {RowId}: {e}")
 			return False
@@ -502,14 +511,14 @@ class Fetcher:
 			CsvName = "websites_logos"
 			
 			Cursor.execute('''
-				SELECT domain, logo_url, extraction_method, favicon_url, robots_txt 
+				SELECT domain, logo_url, extraction_method, confidence_score, robots_txt 
 				FROM domains
 				''')
 			data = Cursor.fetchall()
 			
 			with open(f"{CsvName}.csv", 'w', newline='', encoding='utf-8') as csvfile:
 				writer = csv.writer(csvfile)
-				writer.writerow(['domain', 'logo_url', 'extraction_method', 'favicon_url', 'robots_txt'])
+				writer.writerow(['domain', 'logo_url', 'extraction_method', 'confidence_score', 'robots_txt'])
 				writer.writerows(data)
 			
 			print(f"Successfully exported to {CsvName}.csv")
