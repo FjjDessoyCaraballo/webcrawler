@@ -10,7 +10,6 @@ from typing import Optional, Tuple, List
 class Fetcher:
 	def __init__(self):
 		self._conn: Optional[sqlite3.Connection] = None
-		self._rows = ()
 	
 	def EntryPoint(self, DbPath: str) -> bool:
 		"""
@@ -376,7 +375,7 @@ class Fetcher:
 
 		return None
 
-	async def _InsertLogoIntoDb(self, RowId: int, LogoUrl: str, Method: str, Confidence: float) -> None:
+	def _InsertLogoIntoDb(self, RowId: int, LogoUrl: str, Method: str, Confidence: float) -> None:
 		"""
 		Method that exclusively deals with inserting logos into the database.
 
@@ -407,7 +406,7 @@ class Fetcher:
 			print(f"Unexpected error updating row {RowId}: {e}")
 			return False
 
-	async def _FaviconExtraction(self, HtmlBody: str, Domain: str) -> Optional[str]:
+	def _FaviconExtraction(self, HtmlBody: str, Domain: str) -> Optional[str]:
 		"""
 		Method to find and extract URL of favicon
 
@@ -438,7 +437,7 @@ class Fetcher:
 
 		return None
 	
-	async def _InsertFavicon(self, RowId: int, Favicon: str, Method: str) -> None:
+	def _InsertFavicon(self, RowId: int, Favicon: str, Method: str) -> None:
 		"""
 		Method for insertion of favicon URL into database column favicon_url.
 
