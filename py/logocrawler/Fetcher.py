@@ -101,7 +101,6 @@ class Fetcher:
 
 		:Returns: None if no method was applicable, we return None
 		"""
-		LogoUrl: str
 		Favicon: str
 
 		# Find favicon as a temporary fallback alternative
@@ -109,23 +108,22 @@ class Fetcher:
 		if Favicon is not None:
 			self._InsertFavicon(RowId, Favicon, 'FAVICON_LINK')
 
-		# Method 1: SVG tags
-		LogoUrl = self._SvgMethod(HtmlBody, Domain)
-		if LogoUrl is not None:
-			self._InsertLogoIntoDb(RowId, LogoUrl, 'SVG_TAG', 0.8)
-			return True
+		PossibleLogo: Tuple[str, float] = []
 
-		# Method 2: img tags
-		LogoUrl = self._ImgMethod(HtmlBody, Domain)
-		if LogoUrl is not None:
-			self._InsertLogoIntoDb(RowId, LogoUrl, 'IMG_TAG', 0.6)
-			return True
+		# 28th of May CURRENT ISSUE: SVGs got scored and any minimum match would be enough
+		# Need to score them all together and fetch the highest scoring
+
+		PossibleLogoSvg = self._SvgMethod(HtmlBody, Domain)
+		PossibleLogoImg = self._ImgMethod(HtmlBody, Domain)
+		PossibleLogoCustom = self._CustomTagMethod(HtmlBody, Domain)
 		
-		# Method 3: custom tags
-		LogoUrl = self._CustomTagMethod(HtmlBody, Domain)
-		if LogoUrl is not None:
-			self._InsertLogoIntoDb(RowId, LogoUrl, 'CUSTOM_TAG', 0.3)
-			return True
+		PossibleLogo.extend(PossibleLogoSvg)
+		PossibleLogo.extend(PossibleLogoImg)
+		PossibleLogo.extend(PossibleLogoCustom)
+
+		WinnerPossibility = max(PossibleLogo, key=lambda x: x[1])
+		
+		self._InsertLogoIntoDb(RowId, WinnerPossibility[0], 'CUSTOM_TAG', 0.3)
 
 		return False
 
@@ -158,8 +156,8 @@ class Fetcher:
 		# AI used here: helped with the lambda syntax in max
 		# There's still a chance to have two same score WinnerSvgs
 		WinnerSvg = max(ScoredSvgs, key=lambda x: x[1])[0]
-		LogoUrl = self._SvgToDataUrl(WinnerSvg), WinnerSvg[1]
-		return LogoUrl
+		LogoUrl = self._SvgToDataUrl(WinnerSvg)
+		return LogoUrl, WinnerSvg[1]
 
 	def _SvgToDataUrl(self, SvgContent: str) -> str:
 		"""
@@ -253,19 +251,21 @@ class Fetcher:
 
 		return max(0.0, min(1.0, Score))
 
-	def _FindAllTags(self, HtmlBody: str, pattern: str) -> List[Tuple[str, str]]:
+	def _FindAllTags(self, HtmlBody: str, Pattern: str) -> List[Tuple[str, str]]:
 		"""
 		Method for extraction of all tags that match the regex pattern.
 
-		:Parameter:
+		:Parameter: HtmlBody a string that contains the HTML body.
 
-		:Returns: AllTags
+		:Parameter: pattern
+
+		:Returns: AllTags list of tuples with content and context around the tags.
 		"""
 		AllTags = []
 
 		# IGNORECASE - case insensitive
 		# DOTALL - make dot match newlines too
-		matches = re.finditer(pattern, HtmlBody, re.DOTALL | re.IGNORECASE)
+		matches = re.finditer(Pattern, HtmlBody, re.DOTALL | re.IGNORECASE)
 
 		for match in matches:
 			BeforeContext = match.group(1)
@@ -320,8 +320,6 @@ class Fetcher:
 
 		:Returns: LogoUrl string containing URL of logo image. Returns None if method fails to find logo.
 		"""
-		LogoUrl: Tuple[str, float] = '', 0.0
-		Score: float = 0.0
 		imgs: list[Tuple[str, str]] = []
 
 		imgs = self._FindAllTags(HtmlBody, r'(.{0,200})<img[^>]*>.*?</img>(.{0,200})')
@@ -343,8 +341,8 @@ class Fetcher:
 			return None
 		
 		WinnerImg = max(ScoredImg, key=lambda x: x[2])
-		LogoUrl = WinnerImg[0], WinnerImg[1]
-		return LogoUrl
+
+		return WinnerImg[0], WinnerImg[2]
 
 
 	def _CustomTagMethod(self, HtmlBody: str, Domain: str):
@@ -359,21 +357,35 @@ class Fetcher:
 
 		:Returns: LogoUrl string containing URL of logo image. Returns None if method fails to find logo.
 		"""
-		LogoUrl: str = ''
-		patterns = [
-			r'<a[^>]*class=["\'][^"\']*logo[^"\']*["\'][^>]*style=["\'][^"\']*background-image:\s*url\(["\']?([^"\')\s]+)["\']?\)[^"\']*["\'][^>]*>',
-			r'<div[^>]*class=["\'][^"\']*logo[^"\']*["\'][^>]*style=["\'][^"\']*background-image:\s*url\(["\']?([^"\')\s]+)["\']?\)[^"\']*["\'][^>]*>',
-			r'<span[^>]*class=["\'][^"\']*logo[^"\']*["\'][^>]*style=["\'][^"\']*background-image:\s*url\(["\']?([^"\')\s]+)["\']?\)[^"\']*["\'][^>]*>'
-		]
+		aTags = self._FindAllTags(HtmlBody, r'(.{0,200})<a[^>]*class=["\'][^"\']*logo[^"\']*["\'][^>]*style=["\'][^"\']*background-image:\s*url\(["\']?([^"\')\s]+)["\']?\)[^"\']*["\'][^>]*>(.{0,200})')
+		Divs = self._FindAllTags(HtmlBody, r'(.{0,200})<div[^>]*class=["\'][^"\']*logo[^"\']*["\'][^>]*style=["\'][^"\']*background-image:\s*url\(["\']?([^"\')\s]+)["\']?\)[^"\']*["\'][^>]*>(.{0,200})')
+		Spans = self._FindAllTags(HtmlBody, r'(.{0,200})<span[^>]*class=["\'][^"\']*logo[^"\']*["\'][^>]*style=["\'][^"\']*background-image:\s*url\(["\']?([^"\')\s]+)["\']?\)[^"\']*["\'][^>]*>(.{0,200})')
 
-		for pattern in patterns:
-			match = re.search(pattern, HtmlBody, re.IGNORECASE)
-			if match:
-				BackgroundUrl = match.group(1)
-				LogoUrl = self._MakeAbsoluteUrl(BackgroundUrl, Domain)
-				return LogoUrl
+		Patterns: list[Tuple[str, str]] = []
+		Patterns.extend(aTags)
+		Patterns.extend(Divs)
+		Patterns.extend(Spans)
 
-		return None
+		if not Patterns:
+			return None
+
+		ScoredTag: list[Tuple[str, float]] = []
+
+		for Content, Context in Patterns:
+			Score = self._CalculateProbabilityScore(Content, Context)
+			if Score > 0:
+				BackgroundMatch = re.search(r'background-image:\s*url\(["\']?([^"\')\s]+)["\']?\)', Content, re.IGNORECASE)
+				if BackgroundMatch:
+					SourceUrl = BackgroundMatch.group(1)
+					AbsoluteUrl = self._MakeAbsoluteUrl(SourceUrl, Domain)
+					ScoredTag.append((AbsoluteUrl, Content, Score))
+		
+		if not ScoredTag:
+			return None
+
+		WinnerTag = max(ScoredTag, key=lambda x: x[2])
+		
+		return WinnerTag[0], WinnerTag[2]
 
 	def _InsertLogoIntoDb(self, RowId: int, LogoUrl: str, Method: str, Confidence: float) -> None:
 		"""
