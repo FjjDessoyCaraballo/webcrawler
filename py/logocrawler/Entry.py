@@ -15,8 +15,7 @@ def main():
 		if domain == '':
 			return 1
 		CrawlerInstance.EntryPoint(domain, 2)
-	
-	if len(sys.argv) == 3 and sys.argv[2] == 'fetch':
+	elif len(sys.argv) == 3 and sys.argv[2] == 'fetch':
 		# fetcher works with pre-existing db generated from crawler
 		FetcherInstance = fetcher.Fetcher()
 		FetcherInstance.EntryPoint(sys.argv[1])

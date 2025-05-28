@@ -29,7 +29,7 @@ class Fetcher:
 			# and if database is locked.
 			Cursor = self._FetchRows()
 			self._ProcessRows(Cursor)
-			self._UnloadDatabaseToCsv
+			self._UnloadDatabaseToCsv()
 			self._conn.close()
 			return True
 		except sqlite3.OperationalError as e:
@@ -78,7 +78,7 @@ class Fetcher:
 						print(f'[{RowId}] 🔴 Failed to extract logo for {Domain}')
 				except Exception as e:
 					error += 1
-					print(f'[{RowId}] Error processing {Domain}: {e}')
+					print(f'[{RowId}] 🔴 Error processing {Domain}: {e}')
 					continue
 
 			self._conn.commit()
@@ -268,7 +268,7 @@ class Fetcher:
 		matches = re.finditer(pattern, HtmlBody, re.DOTALL | re.IGNORECASE)
 
 		for match in matches:
-			BeforeContext = match.group1(1)
+			BeforeContext = match.group(1)
 			Content = match.group(0)[len(match.group(1)):-len(match.group(2))]
 			AfterContext = match.group(2)
 
@@ -388,7 +388,7 @@ class Fetcher:
 		:Returns: None
 		"""
 		try:
-			self._conn.execute(''''
+			self._conn.execute('''
 						UPDATE domains
 						SET logo_url = ?, extraction_method = ?, confidence_score = ?
 						WHERE id = ?
@@ -448,7 +448,7 @@ class Fetcher:
 		:Parameter: Method methodology used to obtain logo.
 		"""
 		try:
-			self._conn.execute(''''
+			self._conn.execute('''
 						UPDATE domains
 						SET favicon_url = ?, extraction_method = ?
 						WHERE id = ?
@@ -477,17 +477,17 @@ class Fetcher:
 			Cursor = self._conn.cursor()
 			
 			# Cursor.execute("SELECT name FROM sqlite_master WHERE type='table';") # gonna reformulate the SQL query
-			CsvName = "websites_logos.csv"
+			CsvName = "websites_logos"
 			
 			Cursor.execute('''
-				SELECT domain, logo_url, fetch_status, robots_txt 
+				SELECT domain, logo_url, extraction_method, favicon_url, robots_txt 
 				FROM domains
 				''')
 			data = Cursor.fetchall()
 			
 			with open(f"{CsvName}.csv", 'w', newline='', encoding='utf-8') as csvfile:
 				writer = csv.writer(csvfile)
-				writer.writerow(['domain', 'logo_url', 'fetch_status', 'robots_txt'])
+				writer.writerow(['domain', 'logo_url', 'extraction_method', 'favicon_url', 'robots_txt'])
 				writer.writerows(data)
 			
 			print(f"Successfully exported to {CsvName}.csv")
