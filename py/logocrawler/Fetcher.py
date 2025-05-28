@@ -129,7 +129,7 @@ class Fetcher:
 
 		return False
 
-	def _SvgMethod(self, HtmlBody: str, Domain: str):
+	def _SvgMethod(self, HtmlBody: str, Domain: str) -> Tuple[str, float]:
 		"""
 		Method #1 for logo extraction by converting SVG into URL data methodology using base64.
 
@@ -139,7 +139,7 @@ class Fetcher:
 
 		:Returns: LogoUrl string containing URL of logo image. Returns None if method fails to find logo.
 		"""
-		LogoUrl: str = ''
+		LogoUrl: Tuple[str, float] = '', 0.0
 		Score: float = 0.0
 		AllSvgs: List[Tuple[str, str]] = []
 
@@ -158,7 +158,7 @@ class Fetcher:
 		# AI used here: helped with the lambda syntax in max
 		# There's still a chance to have two same score WinnerSvgs
 		WinnerSvg = max(ScoredSvgs, key=lambda x: x[1])[0]
-		LogoUrl = self._SvgToDataUrl(WinnerSvg)
+		LogoUrl = self._SvgToDataUrl(WinnerSvg), WinnerSvg[1]
 		return LogoUrl
 
 	def _SvgToDataUrl(self, SvgContent: str) -> str:
@@ -320,7 +320,7 @@ class Fetcher:
 
 		:Returns: LogoUrl string containing URL of logo image. Returns None if method fails to find logo.
 		"""
-		LogoUrl: str = ''
+		LogoUrl: Tuple[str, float] = '', 0.0
 		Score: float = 0.0
 		imgs: list[Tuple[str, str]] = []
 
@@ -343,7 +343,7 @@ class Fetcher:
 			return None
 		
 		WinnerImg = max(ScoredImg, key=lambda x: x[2])
-		LogoUrl = WinnerImg[0]
+		LogoUrl = WinnerImg[0], WinnerImg[1]
 		return LogoUrl
 
 
