@@ -116,10 +116,20 @@ class Fetcher:
 		PossibleLogoSvg = self._SvgMethod(HtmlBody, Domain)
 		PossibleLogoImg = self._ImgMethod(HtmlBody, Domain)
 		PossibleLogoCustom = self._CustomTagMethod(HtmlBody, Domain)
+
+		AllResults = [PossibleLogoSvg, PossibleLogoImg, PossibleLogoCustom]
 		
-		PossibleLogo.extend(PossibleLogoSvg)
-		PossibleLogo.extend(PossibleLogoImg)
-		PossibleLogo.extend(PossibleLogoCustom)
+		print(f'SVG SCORE: {PossibleLogoSvg[1]}')
+		print(f'IMG SCORE: {PossibleLogoImg[1]}')
+		print(f'A SCORE: {PossibleLogoCustom[1]}')
+
+
+		for result in AllResults:
+			if result is not None:
+				if isinstance(result, list):
+					PossibleLogo.extend([r for r in result if r is not None])
+				elif isinstance(result, tuple) and len(result) == 2:
+					PossibleLogo.append(result)
 
 		WinnerPossibility = max(PossibleLogo, key=lambda x: x[1])
 		
@@ -155,9 +165,9 @@ class Fetcher:
 		
 		# AI used here: helped with the lambda syntax in max
 		# There's still a chance to have two same score WinnerSvgs
-		WinnerSvg = max(ScoredSvgs, key=lambda x: x[1])[0]
-		LogoUrl = self._SvgToDataUrl(WinnerSvg)
-		return LogoUrl, WinnerSvg[1]
+		WinnerSvg = max(ScoredSvgs, key=lambda x: x[1])
+		LogoUrl = self._SvgToDataUrl(WinnerSvg[0])
+		return (LogoUrl, WinnerSvg[1])
 
 	def _SvgToDataUrl(self, SvgContent: str) -> str:
 		"""
