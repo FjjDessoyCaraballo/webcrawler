@@ -22,7 +22,7 @@ class Fetcher:
 		if not os.path.exists('logs'):
 			os.makedirs('logs')
 
-		Timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+		Timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 		self._LogPath = os.path.join('logs', f'fetcher_{Timestamp}.log')
 		InitialMessage = f"Fetcher started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 		with open(self._LogPath, 'w', encoding='utf-8') as self._LogFile:
@@ -37,7 +37,6 @@ class Fetcher:
 
 		:Parameter: log - a string containing error log information.
 		"""
-		LogText = str(Log)
 		if self._LogPath:
 			Timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 			FormattedMessage = f'{Timestamp}: {Log}'
@@ -213,6 +212,9 @@ class Fetcher:
 			if Score > 0:
 				ScoredSvgs.append((Content, Score))
 		
+		if not ScoredSvgs:
+			return None
+
 		# AI used here: helped with the lambda syntax in max
 		# There's still a chance to have two same score WinnerSvgs
 		WinnerSvg = max(ScoredSvgs, key=lambda x: x[1])
@@ -246,9 +248,15 @@ class Fetcher:
 		Score: float = 0.0
 		
 		# Make everything lower case to have a standard baseline
-		ContentLowerCase = Content.lower()
-		ContextLowerCase = Context.lower()
+		ContentLowerCase: str = ''
+		ContentLowerCase: str = ''
+		
+		if Content:
+			ContentLowerCase = Content.lower()
+		if Context:
+			ContextLowerCase = Context.lower()
 
+		
 		# AI used: used AI to find a way to structure a scoring point system for the SVGs
 		# so the values are a bit arbitrary. It has been reworked on 29th.
 		PositiveIndicators = {
@@ -361,6 +369,8 @@ class Fetcher:
 				# negative indicators are meant to keep us clear from false-positives.
 				Score -= penalty
 
+		if not Score:
+			return 0.0
 
 		Result: float = max(0.0, min(1.0, Score))
 
@@ -605,15 +615,18 @@ class Fetcher:
 		try:
 			Cursor = self._conn.cursor()			
 			
-			CsvName = "websites_logos2"
+			CsvName = "websites_logos"
 			
 			Cursor.execute('''
 				SELECT domain, logo_url, extraction_method, confidence_score, robots_txt 
 				FROM domains
 				''')
 			data = Cursor.fetchall()
-			timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-			with open(f"{CsvName}_{timestamp}.csv", 'w', newline='', encoding='utf-8') as csvfile:
+			Timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+			if not os.path.exists('data'):
+				os.makedirs('data')
+			CsvPath = os.path.join('data', f'{CsvName}_{Timestamp}.csv')
+			with open(CsvPath, 'w', newline='', encoding='utf-8') as csvfile:
 				writer = csv.writer(csvfile)
 				writer.writerow(['domain', 'logo_url', 'extraction_method', 'confidence_score', 'robots_txt'])
 				writer.writerows(data)

@@ -1,8 +1,8 @@
 import sqlite3
-import sys
 import os
 import csv
 import random
+import glob
 
 """
 I wanted to use pytest, but given the task I was given it would've taken far too much
@@ -13,8 +13,10 @@ NB: The database is not present in the repository since it is quite hefty (almos
 for the regular git repository.
 """
 
-def test_database_content(db_path):
-	"""Check what's in the database"""
+def TestDatabaseContent(db_path):
+	"""
+	Check what's in the database
+	"""
 	if not os.path.exists(db_path):
 		print(f"Database not found at {db_path}")
 		return False
@@ -47,8 +49,10 @@ def test_database_content(db_path):
 	conn.close()
 	return True
 
-def test_specific_domain(DbPath, Domain):
-	"""Test extraction for a specific domain"""
+def TestSpecificDomain(DbPath, Domain):
+	"""
+	Test extraction for a specific domain
+	"""
 	conn = sqlite3.connect(DbPath)
 	cursor = conn.cursor()
 	
@@ -86,17 +90,17 @@ def test_specific_domain(DbPath, Domain):
 	conn.close()
 
 def main():
-	DbPath = '../../logos.db'
-	
-	if len(sys.argv) > 1:
-		DbPath = sys.argv[1]
+	DbPath = '../logos.db'
 	
 	print(f"Testing Fetcher with database: {DbPath}\n")
 	
-	if not test_database_content(DbPath):
+	if not TestDatabaseContent(DbPath):
 		return 1
-		
-	with open('../websites.csv', 'r') as CsvFile:
+
+	LatestCsv = max(glob.glob("data/websites_logos_*.csv"))
+	print("\n" + "="*50)
+	print(f'Latest csv: {LatestCsv}')
+	with open(LatestCsv) as CsvFile:
 		Reader = csv.reader(CsvFile)
 		Data = []
 		for rows in Reader:
@@ -105,14 +109,15 @@ def main():
 	
 	Sample = random.sample(Data, 5)
 
-    
 	TestDomains = Sample
 	for domain in TestDomains:
-		test_specific_domain(DbPath, domain)
+		TestSpecificDomain(DbPath, domain)
+		print("\n" + "="*50)
+
 	
 	print("\n" + "="*50)
 	print("To run the full Fetcher, use:")
-	print(f"  python Entry.py {DbPath} fetch")
+	print(f"  ./fetch.sh")
 	print("="*50)
 	
 	return 0
