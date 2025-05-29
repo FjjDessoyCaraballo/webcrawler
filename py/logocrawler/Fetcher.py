@@ -5,12 +5,52 @@ import csv
 import sqlite3
 from urllib.parse import urljoin, urlparse
 from typing import Optional, Tuple, List
-
+from datetime import datetime
 
 class Fetcher:
 	def __init__(self):
 		self._conn: Optional[sqlite3.Connection] = None
-	
+		self._LogPath = None
+		self._LogFile = None
+
+	def _StartLog(self) -> None:
+		"""
+		Setup of error logger file.
+
+		:Returns: LogPath - a string containing error log information.
+		"""
+		if not os.path.exists('logs'):
+			os.makedirs('logs')
+
+		Timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+		self._LogPath = os.path.join('logs', f'fetcher_{Timestamp}.log')
+		InitialMessage = f"Fetcher started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+		with open(self._LogPath, 'w', encoding='utf-8') as self._LogFile:
+			self._LogFile.write(InitialMessage + '\n')
+		self._LogFile.close()
+
+	def _WriteLog(self, Log) -> None:
+		"""
+		Simple method to log errors that occurred during fetching. This won't log expected errors such as not finding logos because
+		low scoring in _CalculateProbabilityScore because that is not the objective of the logs. The objective here is to find abnormal
+		errors.
+
+		:Parameter: log - a string containing error log information.
+		"""
+		LogText = str(Log)
+		if self._LogPath:
+			Timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+			FormattedMessage = f'{Timestamp}: {Log}'
+			try:
+				with open(self._LogPath, 'a', encoding='utf-8') as LogFile:
+					LogFile.write(FormattedMessage + '\n')
+					print(Log)  # Also print to console
+			except IOError as e:
+					print(f"Error writing to log file: {e}")
+					print(Log)  # Still print to console even if file write fails
+		else:
+			print(Log)  # Fallback if no log path set
+
 	def EntryPoint(self, DbPath: str) -> bool:
 		"""
 		EntryPoint should be the only public method available for users to interact with `Fetcher`. Here we define the location of the
@@ -20,8 +60,9 @@ class Fetcher:
 
 		:Returns: True if successful. False if errors were found before being able to connect to database.
 		"""
+		self._StartLog()
 		if not DbPath or not os.path.exists(DbPath):
-			print(f'Error: database not found in path {DbPath}')
+			self._WriteLog = f'Error: database not found in path {DbPath}'
 			return False
 		try:
 			self._conn = sqlite3.connect(DbPath)
@@ -68,7 +109,7 @@ class Fetcher:
 		try:
 			for row in Cursor:
 				RowId, Domain, HtmlBody, FinalUrl = row
-				print(f'[{RowId}] Attemping to extract logo for {Domain}')
+				print(f'[{RowId}] Attempting to extract logo for {Domain}')
 				try:
 					if self._ScanHtml(RowId, HtmlBody, FinalUrl):
 						processed += 1
@@ -78,17 +119,18 @@ class Fetcher:
 						print(f'[{RowId}] 🔴 Failed to extract logo for {Domain}')
 				except Exception as e:
 					error += 1
-					print(f'[{RowId}] 🔴 Error processing {Domain}: {e}')
+					log = f'[{RowId}] 🔴 Error processing {Domain}: {e}'
+					self._WriteLog(log)
 					continue
 
 			self._conn.commit()
 			print(f'\nTransaction completed: {processed} processed, {error} errors')
 		except sqlite3.DatabaseError as e:
-			self.conn.rollback()
-			print(f'Transaction rolled back on database error: {e}')
+			self._conn.rollback()
+			self._WriteLog(f'Transaction rolled back on database error: {e}')
 		except Exception as e:
-			self.conn.rollback()
-			print(f'Transaction rolled back on unknown error: {e}')
+			self._conn.rollback()
+			self._WriteLog(f'Transaction rolled back on unknown error: {e}')
 
 	def _ScanHtml(self, RowId: int, HtmlBody: str, Domain: str) -> bool:
 		"""
@@ -207,40 +249,79 @@ class Fetcher:
 		ContentLowerCase = Content.lower()
 		ContextLowerCase = Context.lower()
 
-		# AI used: I used AI to find a way to structure a scoring point system for the SVGs
-		# so the values are a bit arbitrary
+		# AI used: used AI to find a way to structure a scoring point system for the SVGs
+		# so the values are a bit arbitrary. It has been reworked on 29th.
 		PositiveIndicators = {
-			# Direct references to logo
-			'logo': 0.4,
-			'brand': 0.3,
-			'company': 0.2,
+			'src="logo': 0.6,           # src="logo.png" 
+			'src="brand': 0.5,          # src="brand.svg"
+			'src="/logo': 0.6,          # src="/logo.png"
+			'src="./logo': 0.6,         # src="./logo.svg"
+			'src="../logo': 0.6,        # src="../logo.png"
+			'href="logo': 0.4,          # href="logo.png" (for <a> tags)
+			'href="/logo': 0.4,         # href="/logo.svg"
+			
+			# Logo in filename patterns
+			'-logo.': 0.5,              # company-logo.png, header-logo.svg
+			'_logo.': 0.5,              # main_logo.png
+			'/logo.': 0.6,              # /logo.png, /logo.svg
+			'logo-': 0.4,               # logo-dark.png, logo-white.svg
+			'logo_': 0.4,               # logo_2024.png
 
-			# Structural indicators (usually you can see logos in the headers)
+			'class="logo': 0.4,
+			'id="logo': 0.4,
+			'alt="logo': 0.4,
+			'title="logo': 0.3,
+			'aria-label="logo': 0.4,
+			
+			# Brand references
+			'class="brand': 0.3,
+			'id="brand': 0.3,
+			'alt="brand': 0.3,
+			
+			# Structural positioning
 			'header': 0.2,
 			'nav': 0.2,
 			'navbar': 0.2,
 			'top': 0.1,
-
-			# Semantic indicators
-			# 'src=' 0.2 # SVGs apparently cannot do src
-			'aria-label': 0.2,
-			'title=': 0.1,
-			'alt=': 0.1,
-
-			# ID patterns
-			'class="logo': 0.4,
-			'id="logo': 0.4,
-			'class="brand': 0.3,
-			'class="header': 0.2,
-
-			# tag specifics
-    		'src="logo': 0.3, # IMG
-        	'src="brand': 0.3, # IMG
-        	'href="logo': 0.2, # A TAG
-        	'href="#logo': 0.3, # A TAG
-			'alt="logo': 0.3, # IMG
-			'viewbox=': 0.1, # SVG
+			
+			# SVG specific
+			'viewbox=': 0.1,
 		}
+
+		# original point system
+
+		# PositiveIndicators = {
+		# 	# Direct references to logo
+		# 	'logo': 0.4,
+		# 	'brand': 0.3,
+		# 	'company': 0.2,
+
+		# 	# Structural indicators (usually you can see logos in the headers)
+		# 	'header': 0.2,
+		# 	'nav': 0.2,
+		# 	'navbar': 0.2,
+		# 	'top': 0.1,
+
+		# 	# Semantic indicators
+		# 	# 'src=' 0.2 # SVGs apparently cannot do src
+		# 	'aria-label': 0.2,
+		# 	'title=': 0.1,
+		# 	'alt=': 0.1,
+
+		# 	# ID patterns
+		# 	'class="logo': 0.4,
+		# 	'id="logo': 0.4,
+		# 	'class="brand': 0.3,
+		# 	'class="header': 0.2,
+
+		# 	# tag specifics
+    	# 	'src="logo': 0.3, # IMG
+        # 	'src="brand': 0.3, # IMG
+        # 	'href="logo': 0.2, # A TAG
+        # 	'href="#logo': 0.3, # A TAG
+		# 	'alt="logo': 0.3, # IMG
+		# 	'viewbox=': 0.1, # SVG
+		# }
 
 		for indicator, weight in PositiveIndicators.items():
 			if indicator in ContentLowerCase or indicator in ContextLowerCase:
@@ -252,6 +333,14 @@ class Fetcher:
 
 		# Use of AI: Also used AI to compile items for the negative indicators list.
 		NegativeIndicators = {
+			'client': 0.4,              # client-logo.png (customer logos)
+			'customer': 0.4,            # customer logos
+			'partner': 0.3,             # partner logos
+			'sponsor': 0.3,             # sponsor logos
+			'portfolio': 0.4,           # portfolio/logo-designs.jpg
+			'gallery': 0.3,             # logo gallery
+			
+			# UI elements
 			'icon': 0.2,
 			'arrow': 0.3,
 			'close': 0.4,
@@ -259,6 +348,11 @@ class Fetcher:
 			'search': 0.3,
 			'social': 0.2,
 			'footer': 0.2,
+			
+			# Size indicators that suggest not main logo
+			'thumb': 0.3,               # thumbnail logos
+			'small': 0.2,               # small logo versions
+			'mini': 0.3,                # mini logos
 		}
 
 		for indicator, penalty in NegativeIndicators.items():
@@ -267,7 +361,10 @@ class Fetcher:
 				# negative indicators are meant to keep us clear from false-positives.
 				Score -= penalty
 
-		return max(0.0, min(1.0, Score))
+
+		Result: float = max(0.0, min(1.0, Score))
+
+		return Result
 
 	def _FindAllTags(self, HtmlBody: str, Pattern: str) -> List[Tuple[str, str]]:
 		"""
@@ -362,7 +459,9 @@ class Fetcher:
 
 		return WinnerImg[0], WinnerImg[2]
 
-
+	"""
+	I had an idea of creating a third method for fallback. It was a terrible idea because it required absurdly specific regex patterns.
+	"""
 	# def _CustomTagMethod(self, HtmlBody: str, Domain: str):
 	# 	"""
 	# 	Method #3 for logo extraction by searching for `a`, `div`, and `span` tags. This method is burdensome 
@@ -461,12 +560,11 @@ class Fetcher:
 				Favicon = self._MakeAbsoluteUrl(FaviconUrl, Domain)
 				return Favicon
 
-		## Fallback method (not going to include to the final submission because it may yield false results)
-		# ParsedUrl = urlparse(Domain)
-		# Favicon = f'{ParsedUrl.scheme}://{ParsedUrl.netloc}/favicon.ico'
-		# return Favicon
+		# Fallback method (not going to include to the final submission because it may yield false results)
+		ParsedUrl = urlparse(Domain)
+		Favicon = f'{ParsedUrl.scheme}://{ParsedUrl.netloc}/favicon.ico'
+		return Favicon
 
-		return None
 	
 	def _InsertFavicon(self, RowId: int, Favicon: str, Method: str) -> None:
 		"""
@@ -505,18 +603,17 @@ class Fetcher:
 		:Returns: True is successful. False if it fails.
 		"""
 		try:
-			Cursor = self._conn.cursor()
+			Cursor = self._conn.cursor()			
 			
-			# Cursor.execute("SELECT name FROM sqlite_master WHERE type='table';") # gonna reformulate the SQL query
-			CsvName = "websites_logos"
+			CsvName = "websites_logos2"
 			
 			Cursor.execute('''
 				SELECT domain, logo_url, extraction_method, confidence_score, robots_txt 
 				FROM domains
 				''')
 			data = Cursor.fetchall()
-			
-			with open(f"{CsvName}.csv", 'w', newline='', encoding='utf-8') as csvfile:
+			timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+			with open(f"{CsvName}_{timestamp}.csv", 'w', newline='', encoding='utf-8') as csvfile:
 				writer = csv.writer(csvfile)
 				writer.writerow(['domain', 'logo_url', 'extraction_method', 'confidence_score', 'robots_txt'])
 				writer.writerows(data)
