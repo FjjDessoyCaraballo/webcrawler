@@ -4,7 +4,6 @@ import sqlite3
 import aiohttp
 import ssl
 import asyncio
-# import random ## FOR TESTING PURPOSES
 
 class Crawler:
 	def __init__(self):

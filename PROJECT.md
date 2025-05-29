@@ -2,7 +2,7 @@
 
 ## Challenges
 
-1. There's not one way that websites put their logos. Some are gonna be in tags such as `<svg>`, `<img>`, even `<a>`; others may put it as CSS background;
+1. There's not one way that websites put their logos. Some are gonna be in tags such as `<svg>` and `<img>`; others may put it as CSS background;
 2. Crawling and fetching strategy needs to take into consideration resources because fetching all the time is time and resource consuming;
 3. External libraries should be used with caution and parsimoniously;
 4. Even if I get results, I need to find a scalable way of checking the results;
@@ -83,14 +83,12 @@ Built-in libraries used:
 
 *IMG_TAG*: Found logo via `<img>` tag with "logo"
 *SVG_TAG*: Found logo via `<SVG>` tag with "logo"
-*CUSTOM_TAG*: Found logo via, for example, `<a>` tag with "logo"
 *FAVICON*: Used favicon as fallback logo
 
 ### Confidence Scores
 
-*1.0*: High confidence (clear logo indicators)
-*0.7-0.9*: Medium confidence (probable logo)
-*0.5-0.6*: Low confidence (uncertain match)
-*0.0-0.4*: Very low confidence (likely false positive)
-*NULL*: No extraction attempted or failed
-
+*0.91-1.0*: Very high confidence
+*0.71-0.9*: High confidence
+*0.51-0.7*: Medium confidence
+*0.21-0.5*: Low confidence
+*0.0-0.2*: Very low confidence
