@@ -97,6 +97,7 @@ def main():
 	if not TestDatabaseContent(DbPath):
 		return 1
 
+	# WE ARE ASSUMING THAT THIS IS EXECUTED AT ROOT LEVEL OF DIRECTORY
 	LatestCsv = max(glob.glob("data/websites_logos_*.csv"))
 	print("\n" + "="*50)
 	print(f'Latest csv: {LatestCsv}')

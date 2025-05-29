@@ -82,14 +82,13 @@ class Crawler:
 		"""
 		Fetch the index.htm file from all listed domains and insert them into the database. Takes no arguments.
 		"""
-		# Counters for visualization
+		# counters
 		SuccessCounter: int = 0
 		FailedCounter: int = 0
 
-		# self._Entries = random.sample(self._Entries, 10) ## FOR TESTING PURPOSES
-
 		conn: sqlite3.Connection = sqlite3.connect(self._DbPath)
 
+		# AI helped me here to get a more 'human-like' header and ssl connection
 		ssl_context = ssl.create_default_context()
 		ssl_context.check_hostname = False
 		ssl_context.verify_mode = ssl.CERT_NONE
@@ -104,7 +103,6 @@ class Crawler:
 		# the parameters of the timeout should probably be defined from other variables inherited from the parent process
 		timeout = aiohttp.ClientTimeout(total=15, connect=10) # change timeout according to connection and latency
 		
-		# AI helped me here to get a more 'human-like' header
 		headers = {
 			'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
 			'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
