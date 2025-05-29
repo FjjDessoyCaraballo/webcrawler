@@ -20,6 +20,8 @@ in pkgs.mkShell rec {
                 ipython
                 aiohttp
                 nose
+                # The pandas library is solely for presentation purposes. It is not part of my solution.
+                pandas
             ];
         })
     ]);
