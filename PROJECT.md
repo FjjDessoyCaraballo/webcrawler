@@ -52,25 +52,6 @@ Built-in libraries used:
 - SQLite3 documentation: [[1]](https://www.sqlite.org/docs.html)
 - Regular expression documentation: [[1]](https://docs.python.org/3/library/re.html)
 
-## Current schema of the database
-
-**Table**: `domains`
-
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | INTEGER | PRIMARY KEY | Unique identifier for each domain record |
-| `domain` | TEXT | UNIQUE | The base domain name (e.g., "facebook.com") |
-| `robots_txt` | INTEGER | CHECK (0,1) | Whether robots.txt allows crawling: `0` = disallowed, `1` = allowed |
-| `html_body` | TEXT | | The complete HTML content of the website's index page |
-| `final_url` | TEXT | | The final URL after following redirects (e.g., "https://www.facebook.com") |
-| `logo_url` | TEXT | | The extracted logo image URL (if found) |
-| `favicon_url` | TEXT | | The extracted favicon URL (if found) |
-| `fetch_timestamp` | DATETIME | DEFAULT CURRENT_TIMESTAMP | When the domain was last crawled |
-| `fetch_status` | INTEGER | | HTTP status code received (200, 403, 404, etc.) or custom error codes |
-| `error_type` | TEXT | | Type of error encountered during crawling |
-| `extraction_method` | TEXT | | The method used to extract the logo (for debugging/optimization) |
-| `confidence_score` | REAL | | Confidence level (0.0-1.0) in the extracted logo accuracy |
-
 ### Fetch Status Codes
 
 *200*: Successful fetch
