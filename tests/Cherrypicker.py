@@ -175,15 +175,18 @@ def Visualizer():
 
 def main():
 	## ASSUME THAT THIS IS RAN AT ROOT OF DIRETORY
-	if len(sys.argv) == 2:
-		if sys.argv[1] == 'vizz':
-			Visualizer()
-		elif sys.argv[1] == 'cherrypick':
-			Cherrypicker()
-		else:
-			print('Whoopsie')
-			return 1
+	if len(sys.argv) != 1:
+		print("Error")
+		return 1
+
+	choice = input("Insert 1 for data visualization or 2 for cherrypicking test: ")
+
+	if choice == '1':
+		Visualizer()
+	elif choice == '2':
+		Cherrypicker()
 	else:
+		print('Whoopsie')
 		return 1
 	return 0
 
