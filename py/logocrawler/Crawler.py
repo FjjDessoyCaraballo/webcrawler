@@ -21,18 +21,18 @@ class Crawler:
 		conn: sqlite3.Connection = sqlite3.connect(self._DbPath)
 		conn.execute('''
 			CREATE TABLE IF NOT EXISTS domains (
-			   id INTEGER PRIMARY KEY,
-			   domain TEXT UNIQUE,
-			   robots_txt INTEGER CHECK (robots_txt IN (0, 1)),
-			   html_body TEXT,
-			   final_url TEXT,
-			   logo_url TEXT,
-			   favicon_url TEXT,
-			   fetch_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-			   fetch_status INTEGER,
-			   error_type TEXT,
-			   extraction_method TEXT,
-			   confidence_score REAL
+				id INTEGER PRIMARY KEY,
+				domain TEXT UNIQUE,
+				robots_txt INTEGER CHECK (robots_txt IN (0, 1)),
+				html_body TEXT,
+				final_url TEXT,
+				logo_url TEXT,
+				favicon_url TEXT,
+				fetch_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+				fetch_status INTEGER,
+				error_type TEXT,
+				extraction_method TEXT,
+				confidence_score REAL
 			)
 		''')
 		conn.commit()
@@ -122,6 +122,7 @@ class Crawler:
 			for domain in self._Entries:
 
 				# Check if robots.txt exists first
+				# this should be taking SucessUrl instead of domain
 				RobotsAllowed = await self._CheckRobotsTxt(session, domain)
 
 				# Fallback method to differentiate between http and https
@@ -153,9 +154,9 @@ class Crawler:
 					FailedCounter += 1
 					print(f"❌ {domain}: Failed (Status : {StatusCode or 'Network Error'})")
 
-				# If we sleep for 100ms we may avoid rate limiting. It adds up in the collection, but pays off in the long-term.
-				# instead of fixed number (100ms) I could probably check the robots.txt for `Crawl-delay`. 
-				await asyncio.sleep(0.1)
+				# This was only necessary because there was more than one request in previous implementations
+				# The sleep was a wait to avoid rate limiting
+				# await asyncio.sleep(0.1)
 		
 		conn.commit()
 		conn.close()

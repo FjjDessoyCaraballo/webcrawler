@@ -8,9 +8,112 @@ import glob
 def Cherrypicker():
 	LatestCsv = max(glob.glob("data/websites_logos_*.csv"))
 	df = pd.read_csv(LatestCsv)
-	sample = df[['domain', 'logo_url']].dropna().sample(5)
-	for _, row in sample.iterrows():
-		print(f"{row['domain']}: {row['logo_url']}")
+
+	df_with_logos = df[['domain', 'logo_url', 'confidence_score']].dropna()
+
+	if df_with_logos.empty:
+		print("No domains with logos and confidence scores found.")
+		return
+
+	bins = [0.0, 0.2, 0.5, 0.7, 0.9, 1.0]
+	labels = ['Very Low (0.0-0.2)', 'Low (0.21-0.5)', 'Medium (0.51-0.7)', 
+	          'High (0.71-0.9)', 'Very High (0.91-1.0)']
+
+	df_with_logos['confidence_band'] = pd.cut(df_with_logos['confidence_score'], 
+	                                          bins=bins, labels=labels, include_lowest=True)
+
+	grouped = df_with_logos.groupby('confidence_band', observed=True)
+	band_counts = df_with_logos['confidence_band'].value_counts().sort_index()
+
+	print("🎯 Logo Extraction Results by Confidence Level")
+	print("=" * 60)
+	print(f"Total domains with extracted logos: {len(df_with_logos)}")
+	print()
+
+	print("Available confidence bands:")
+	band_options = {}
+	option_num = 1
+
+	for band in reversed(labels):
+		count = band_counts.get(band, 0)
+		if count > 0:
+			print(f"  {option_num}. {band} ({count} domains)")
+			band_options[str(option_num)] = band
+			option_num += 1
+
+	print(f"  {option_num}. All bands (overview)")
+	band_options[str(option_num)] = "all"
+	print("  0. Exit")
+	print()
+
+	# User selection
+	while True:
+		choice = input("Enter your choice (number): ").strip()
+
+		if choice == "0":
+			print("Goodbye!")
+			return
+		elif choice in band_options:
+			selected_band = band_options[choice]
+			break
+		else:
+			print("Invalid choice. Please try again.")
+
+	print("\n" + "=" * 60)
+
+	if selected_band == "all":
+		print("📊 Overview of All Confidence Bands")
+		print("-" * 40)
+		for band in reversed(labels):
+			count = band_counts.get(band, 0)
+			percentage = (count / len(df_with_logos)) * 100 if count > 0 else 0
+			print(f"  {band}: {count} domains ({percentage:.1f}%)")
+		print()
+
+		for band in reversed(labels):
+			if band in grouped.groups:
+				band_data = grouped.get_group(band)
+				sample = band_data.sample(1)
+				row = sample.iloc[0]
+
+				logo_url = row['logo_url']
+
+				print(f"🌐 {row['domain']} ({band.split('(')[0].strip()})")
+				print(f"   Score: {row['confidence_score']:.3f} | Logo: {logo_url}")
+	else:
+		band_data = grouped.get_group(selected_band)
+		print(f"📊 {selected_band} Confidence Band")
+		print(f"📈 {len(band_data)} domains in this band")
+		print("-" * 40)
+
+		max_examples = len(band_data)
+		while True:
+			try:
+				num_examples = input(f"How many examples to show? (1-{max_examples}, or 'all'): ").strip()
+				if num_examples.lower() == 'all':
+					num_examples = max_examples
+					break
+				num_examples = int(num_examples)
+				if 1 <= num_examples <= max_examples:
+					break
+				else:
+					print(f"Please enter a number between 1 and {max_examples}")
+			except ValueError:
+				print("Please enter a valid number or 'all'")
+
+		if num_examples == max_examples:
+			sample = band_data.sort_values('confidence_score', ascending=False)
+		else:
+			sample = band_data.sample(num_examples)
+
+		for i, (_, row) in enumerate(sample.iterrows(), 1):
+			logo_url = row['logo_url']
+
+			print(f"\n{i}. 🌐 {row['domain']}")
+			print(f"   Score: {row['confidence_score']:.3f}")
+			print(f"   Logo: {logo_url}")
+
+	print("\n" + "=" * 60)
 
 def FetchedVsNonfetched():
 	conn = sqlite3.connect('../logos.db')
