@@ -73,3 +73,7 @@ Built-in libraries used:
 *0.51-0.7*: Medium confidence
 *0.21-0.5*: Low confidence
 *0.0-0.2*: Very low confidence
+
+### SQL Injections
+
+While SQL injections are not feasible in `Crawler`, fetcher could retrieve SQL injections disguised  inside HTML bodies. one could easily leave comments inside the HTML body. Even though this is a farfetched possibility, it is still a possibility.
