@@ -120,6 +120,6 @@ The `outfile` is an arbitrary name, therefore you can named it however you see f
 ____
 ## Disclaimer
 
-This project was designed for educational purposes only. When using Crawler or any other webcrawling methods, obey web etiquette of complying to `Robots.txt`.
+This project was designed for educational purposes only. When using Crawler or any other webcrawling methods, obey web etiquette of complying to [Robots.txt](https://developers.google.com/search/docs/crawling-indexing/robots/intro).
 
 
