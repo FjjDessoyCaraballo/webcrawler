@@ -2,8 +2,6 @@
 
 ![WebcrawlerAction](./webcrawler.gif)
 
-This is a technical assignment where I'm building a web crawler to fetch logos from a diverse list of domains. The stack is mostly python.
-
 ## How to use
 
 ### Running on nix environment
