@@ -1,5 +1,7 @@
 # Introduction
 
+The webcrawler is a crawler bot that retrieves company logos. All you have to do is feed links into the `websites.csv` and it will crawl through the domains and retrieve the logo. It also accepts single entries through CLI.
+
 ![WebcrawlerAction](./webcrawler.gif)
 
 ## How to use
